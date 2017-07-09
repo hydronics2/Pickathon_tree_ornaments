@@ -10,7 +10,7 @@ Adafruit_LIS3DH lis = Adafruit_LIS3DH();
 #include <Adafruit_NeoPixel.h>
 
 #define PIN 6
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(15, PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(25, PIN, NEO_GRB + NEO_KHZ800);
 
 
 // Adjust this number for the sensitivity of the 'click' force

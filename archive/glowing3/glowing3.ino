@@ -1,9 +1,4 @@
-// this code takes the x or y accleration (actually y and z the way I have it mounted, x is up and down)
-// it takes a neutral value in setup (so pendulum should be still)
-// next it subtracts from neutral the accerlation values and averages them
-// it also takes a high value about every period (1.9 seconds) and reports that.
-// that high value should give an idea for how windy it is.. that is; how steep the swing is.
-
+// Basic demo for accelerometer readings from Adafruit LIS3DH
 
 #include <Wire.h>
 #include <SPI.h>
@@ -19,20 +14,31 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(5, PIN, NEO_GRB + NEO_KHZ800);
 Adafruit_LIS3DH lis = Adafruit_LIS3DH();
 
 
+float xg, yg, zg;
 long currentTime = 0;
 int lastAverageAcc = 0;
+int intensity = 60;
 
 const int sizeRolling = 20;
+const int sizeRollingLarge = 80;
 int rollingAcc[sizeRolling];
+int rollingLarge[sizeRollingLarge];
 int incrementRolling = 2;
+int incrementRollingLarge = 0;
 
-int yNeutral = 0; 
-int zNeutral = 0;   
+int lastAverageLarge = 0;
 
-long lastZeroHighTime = 0;
+int xLastAverageAcc = 0;
 
-int averageHigh = 0;
-int averageHighLast = 0;
+int sumIncrement = 0;
+int goingUpFlag = 0;
+long lastTimeLow = 0;
+long lastTimeHigh = 0;
+
+float xNeutral = 0;    
+
+long lastIncrementLarge = 0;
+long lastUpdateTime = 0;
 
 
 void setup(void) {
@@ -58,26 +64,45 @@ void setup(void) {
   strip.begin();
   strip.show(); // Initialize all pixels to 'off'
 
+
+
   //capture the near neutral position of the 200G accerometer..at 12bit or 50% of 0-4095=2048
-    long y2 = 0;
-    long z2 = 0;
+    long x2 = 0;
+    int y2 = 0;
+    int z2 = 0;
   for(int i = 0; i<20; i++){
+
     lis.read();      // get X Y and Z data at once
-    int y1 = lis.y;  
-    y1 = abs(y1);
-    y2 = y1 + y2;
+    // Then print out the raw data
+    //Serial.print("X:  "); Serial.print(lis.x); 
+    //Serial.print("  \tY:  "); Serial.print(lis.y); 
+    //Serial.print("  \tZ:  "); Serial.print(lis.z); 
+  
+    int x1 = lis.y;  //read and throw away
+    //delay(5);
+    //x1 = analogRead(xAxis);
+    x2 = x1 + x2;
     delay(5);
-    int z1 = lis.z; 
-    z1 = abs(z1);
-    z2 = z1 + z2;
-    delay(5);
+    //int y1 = analogRead(yAxis);
+    //y2 = y1 + y2;
+    //delay(5);
+    //int z1 = analogRead(zAxis);
+    //z2 = z1 + z2;
+    //delay(5);
   }
-  yNeutral = y2/20;
-  Serial.print("yNeutral: ");
-  Serial.println(yNeutral);
-  Serial.print("zNeutral: ");
-  zNeutral = z2/20;
-  Serial.println(zNeutral); 
+  xNeutral = x2/20;
+  Serial.println(xNeutral);
+  //yNeutral = (int)y2/20;
+  //Serial.println(yNeutral);
+  //zNeutral = (int)z2/20;
+  //Serial.println(zNeutral); 
+
+
+
+
+
+
+  
 }
 
 
@@ -87,47 +112,55 @@ void loop() {
   int averageAcc = 0;
 
   lis.read();      // get X Y and Z data at once
-  int zg = lis.z;
-  zg = abs(zg);
-  int yg = lis.y;
-  yg = abs(yg);
-  int acc = 0;
-  if(yg > zg){  //this is a cheap way to see which axis is the predominent pedulum movement
-    if(yg > yNeutral){
-      yg = yg - yNeutral;
-      acc = yg;
-    }else{
-      yg = yNeutral - yg;
-      acc = yg;
-    }
-  }else{
-    if(zg > zNeutral){
-      zg = zg - zNeutral;
-      acc = zg;
-    }else{
-      zg = zNeutral - zg;
-      acc = yg;
-    }
-  }
+  // Then print out the raw data
+  //Serial.print("X:  "); 
+  //Serial.println(lis.x); 
+  xg = lis.y;
   
-  delay(2); //reading at 400hz
-  rollingAcc[incrementRolling] = acc;   
+  /* Display the results (acceleration is measured in m/s^2) */
+  //xg = event.acceleration.x;
+  //yg = event.acceleration.y;
+  //zg = event.acceleration.z;
+  //int totAcc = 100* sqrt(yg*yg + zg*zg); //9.3 instead of 9.81 based on acc values
+  //int totAcc = 10* sqrt(xg*xg); //
+  if(xg > xNeutral){
+    xg = xg - xNeutral;
+  }else{
+    xg = xNeutral - xg;
+  }
+    
+
+  totAcc = xg;
+
+  delay(2);
+  rollingAcc[incrementRolling] = totAcc;      //keeps track of thrown or dropped
   incrementRolling++;
   if(incrementRolling == sizeRolling){
     incrementRolling = 0;
     }
   findAverage();
-  if(lastAverageAcc > averageHigh){ //keeps track of high.. shows how much the pendulum is swinging
-    averageHigh = lastAverageAcc;
+  
+  if(currentTime - lastIncrementLarge > 50){
+    lastIncrementLarge = currentTime;
+    rollingLarge[incrementRollingLarge] = totAcc;      //keeps track of thrown or dropped
+    incrementRollingLarge++;
+    if(incrementRollingLarge == sizeRollingLarge){
+      incrementRollingLarge = 0;
+      findAverageLarge();
+      }
   }
-  if(currentTime - lastZeroHighTime > 2000){ //every period 1.95 seconds at 37.5 inches, reset the average high
-    lastZeroHighTime = currentTime;
-    averageHighLast = averageHigh;
-    averageHigh = 0;
-    //Serial.println(averageHighLast);
-  }
+
 }
 
+void findAverageLarge(){
+  int high = 0;
+  long averageAcc = 0;
+  for(int i=0; i<sizeRollingLarge; i++){
+    averageAcc = rollingLarge[i] + averageAcc;
+  }
+  lastAverageLarge = averageAcc/sizeRollingLarge;
+}
+  
 void findAverage(){
   long averageAcc = 0;
   for(int i=0; i<sizeRolling; i++){
