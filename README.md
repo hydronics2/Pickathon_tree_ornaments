@@ -21,6 +21,7 @@ extra data here (0-254);
 
 
 ESP8266 receives data from leonardo and HTTP GET request to server at 192.168.16.200
+
 ESP8266 logs onto router SSID IoB2016 password: standard password
 
 teensy3.2 runs web server and receives the data and plays sounds or sends to teensy3.6 to play sounds
