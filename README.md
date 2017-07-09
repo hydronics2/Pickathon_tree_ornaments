@@ -4,6 +4,7 @@ All programmed in Arduino IDE
 
 leonardo runs lights, senses for taps and sends data software serial 115200 to the ESP8266 at 115200
 data format is 
+
 '[' start data
 
 Cocoon#
