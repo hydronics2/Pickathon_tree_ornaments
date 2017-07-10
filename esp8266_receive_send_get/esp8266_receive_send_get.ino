@@ -18,17 +18,12 @@ const int sizeDataLog = 20;
 byte dataLog[sizeDataLog];
 boolean passData = 0;
 
-
+//
 void setup() {
   Serial.begin(115200);
   swSer.begin(115200);
 
   Serial.println("\nSoftware serial test started");
-
-  for (char ch = ' '; ch <= 'z'; ch++) {
-    swSer.write(ch);
-  }
-  swSer.println("");
 
   delay(100);
   // We start by connecting to a WiFi network

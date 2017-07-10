@@ -14,9 +14,9 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_NeoPixel.h>
 
-#define COCCOON 1
+#define COCCOON 9
 #define PIN 6
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(30, PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(15, PIN, NEO_GRB + NEO_KHZ800);
 
 // I2C
 Adafruit_LIS3DH lis = Adafruit_LIS3DH();
