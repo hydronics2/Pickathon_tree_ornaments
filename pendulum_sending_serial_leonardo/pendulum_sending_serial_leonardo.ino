@@ -7,20 +7,22 @@
 //if the averageValue is graeter than ~2500 it sends serial to the ESP at 115200
 /// data format is '[' start, COCOON#, 0-255 tap strength, ']' ending character
 
-
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_LIS3DH.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_NeoPixel.h>
 
-#define COCCOON 9
-#define PIN 6
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(15, PIN, NEO_GRB + NEO_KHZ800);
+#define COCCOON       (9)
+#define PIN           (6)
+#define PIXEL_COUNT   (72 / 4)
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_COUNT, PIN, NEO_GRB + NEO_KHZ800);
 
 // I2C
 Adafruit_LIS3DH lis = Adafruit_LIS3DH();
 
+// Animation
+const uint8_t MAX_BRIGHT = 8;	// 255;
 
 long currentTime = 0;
 int lastAverageAcc = 0;
@@ -29,8 +31,8 @@ const int sizeRolling = 20;
 int rollingAcc[sizeRolling];
 int incrementRolling = 2;
 
-int yNeutral = 0; 
-int zNeutral = 0;   
+int yNeutral = 0;
+int zNeutral = 0;
 
 long lastZeroHighTime = 0;
 
@@ -47,16 +49,16 @@ void setup(void) {
     while (1);
   }
   Serial.println("LIS3DH found!");
-  
+
   lis.setRange(LIS3DH_RANGE_2_G);   // 2, 4, 8 or 16 G!
 
   //1, 10, 25, 50, 100, 200, 400_HZ, LOWPOWER_1K6HZ, _5KHZ
   lis.setDataRate(LIS3DH_DATARATE_400_HZ);
-  
-  Serial.print("Range = "); Serial.print(2 << lis.getRange());  
+
+  Serial.print("Range = "); Serial.print(2 << lis.getRange());
   Serial.println("G");
 
-  Serial.print("Data rate = "); Serial.print(lis.getDataRate());  
+  Serial.print("Data rate = "); Serial.print(lis.getDataRate());
   Serial.println("Hz");
 
   strip.begin();
@@ -67,11 +69,11 @@ void setup(void) {
     long z2 = 0;
   for(int i = 0; i<20; i++){
     lis.read();      // get X Y and Z data at once
-    int y1 = lis.y;  
+    int y1 = lis.y;
     y1 = abs(y1);
     y2 = y1 + y2;
     delay(5);
-    int z1 = lis.z; 
+    int z1 = lis.z;
     z1 = abs(z1);
     z2 = z1 + z2;
     delay(5);
@@ -81,7 +83,7 @@ void setup(void) {
   Serial.println(yNeutral);
   Serial.print("zNeutral: ");
   zNeutral = z2/20;
-  Serial.println(zNeutral); 
+  Serial.println(zNeutral);
 }
 
 
@@ -96,7 +98,7 @@ void loop() {
     //Serial1.write(inByte);
     Serial1.write(inByte);
   }
-  
+
 
   lis.read();      // get X Y and Z data at once
   int zg = lis.z;
@@ -121,9 +123,9 @@ void loop() {
       acc = yg;
     }
   }
-  
+
   delay(2); //reading at 400hz
-  rollingAcc[incrementRolling] = acc;   
+  rollingAcc[incrementRolling] = acc;
   incrementRolling++;
   if(incrementRolling == sizeRolling){
     incrementRolling = 0;
@@ -131,8 +133,21 @@ void loop() {
   findAverage();
   if(lastAverageAcc > 4000){ //TAP detected send it to ESP
     sendTapData();
-  int randomColor = random(0,255);
-  colorWipe(Wheel(randomColor), 0); //
+  uint32_t randomColor = Wheel(random(0,255));
+
+	// Convert to r, g, b
+	uint32_t r = (randomColor & 0xff0000) >> 16;
+	uint32_t g = (randomColor & 0x00ff00) >>  8;
+	uint32_t b = (randomColor & 0x0000ff);
+
+	r = (r * MAX_BRIGHT) >> 8;
+	g = (g * MAX_BRIGHT) >> 8;
+	b = (b * MAX_BRIGHT) >> 8;
+
+	// Composite color as 0xRRGGBB
+	uint32_t finalColor = (r << 16) | (g << 8) | b;
+  colorWipe(finalColor, 0);
+
   memset(rollingAcc, 0, sizeof(rollingAcc)); //clear array so it doesn't take forever to normalize
   delay(400); //
   return;
@@ -173,9 +188,16 @@ void sendTapData(){
 void colorWipe(uint32_t c, uint8_t wait) {
   for(uint16_t i=0; i<strip.numPixels(); i++) {
     strip.setPixelColor(i, c);
-    strip.show();
-    delay(wait);
+
+		if (wait > 0) {
+    	strip.show();
+    	delay(wait);
+		}
   }
+
+	if (wait == 0) {
+		strip.show();
+	}
 }
 
 // Input a value 0 to 255 to get a color value.
@@ -192,4 +214,3 @@ uint32_t Wheel(byte WheelPos) {
   WheelPos -= 170;
   return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
 }
-
