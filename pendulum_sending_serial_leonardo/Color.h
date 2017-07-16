@@ -1,0 +1,69 @@
+#ifndef COLOR_H
+#define COLOR_H
+
+// Trig functions squished to range 0..1
+inline float sin01(float n) {
+	return ((float)sin(n) + 1.0f) * 0.5f;
+}
+
+inline float cos01(float n) {
+	return ((float)cos(n) + 1.0f) * 0.5f;
+}
+
+inline float lerp(float a, float b, float p) {
+	return a + (b - a) * p;
+}
+
+struct RGB8 {
+	uint_fast8_t r;
+	uint_fast8_t g;
+	uint_fast8_t b;
+};
+
+struct RGB {
+	float r;
+	float g;
+	float b;
+};
+
+struct HSV {
+	float h;
+	float s;
+	float v;
+};
+
+// Convert HSV values to RGB
+// All arguments are in range 0..1 . They are not checked for sane values!
+// Return values are in range 0..1
+// Ported from: http://code.activestate.com/recipes/576554-covert-color-space-from-hsv-to-rgb-and-rgb-to-hsv/
+RGB hsv2rgb( float hF, float sF, float vF ) {
+  // Expand H by 6 times for the 6 color regions. Wrap the remainder to 0..1
+  float hWrap = (hF*6.0);
+  hWrap = hWrap - floor(hWrap);  // floating point remainder. 0..1 for each of the 6 color regions
+
+  float v = vF;  // top (max) value
+  float p = vF * (1.0-sF);  // bottom (min) value
+  float q = vF * (1.0-(hWrap*sF));  // falling (yellow->green: the red channel falls)
+  float t = vF * (1.0 - ((1.0-hWrap)*sF));  // rising (red->yellow: the green channel rises)
+
+  // Need to find the correct color region that the hue belongs to.
+  // Hue can have a negative value, so need to step it to positive space, so the modulus % operator behaves as expected.
+  float hF_pos = hF;
+  if( hF_pos < 0.0 ) {
+    hF_pos += ceil(-hF_pos);
+  }
+  uint8_t hue_i = (uint8_t)(floor( hF_pos * 6.0 )) % 6;
+
+  switch( hue_i ) {
+    case 0:  return (RGB){v,t,p};  // red -> yellow
+    case 1:  return (RGB){q,v,p};  // yellow -> green
+    case 2:  return (RGB){p,v,t};  // green -> cyan
+    case 3:  return (RGB){p,q,v};  // cyan -> blue
+    case 4:  return (RGB){t,p,v};  // blue -> magenta
+    case 5:  return (RGB){v,p,q};  // magenta -> red
+  }
+
+  return (RGB){0,0,0};  // sanity escape
+};
+
+#endif
