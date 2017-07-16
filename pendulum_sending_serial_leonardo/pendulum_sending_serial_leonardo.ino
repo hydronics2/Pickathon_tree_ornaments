@@ -11,21 +11,12 @@
 #include <SPI.h>
 #include <Adafruit_LIS3DH.h>
 #include <Adafruit_Sensor.h>
-#include <Adafruit_NeoPixel.h>
+#include "CocoonLEDs.h"
 
-#define COCCOON         (9)
-#define PIN             (6)
-#define LEDS_PER_STRIP  (18)
-#define PIXEL_COUNT     (LEDS_PER_STRIP * 4)
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_COUNT, PIN, NEO_GRB + NEO_KHZ800);
+#define COCOON         (9)
 
 // I2C
 Adafruit_LIS3DH lis = Adafruit_LIS3DH();
-
-// Animation
-const uint8_t MAX_BRIGHT = 8;	// 255;
-float phase = 0.0;
-uint32_t color = (MAX_BRIGHT << 16);	// start: red
 
 long currentTime = 0;
 int lastAverageAcc = 0;
@@ -42,10 +33,17 @@ long lastZeroHighTime = 0;
 int averageHigh = 0;
 int averageHighLast = 0;
 
+uint8_t blink = 0;
+const uint8_t BUILTIN_LED_PIN = 17;
 
 void setup(void) {
+	pinMode(BUILTIN_LED_PIN, OUTPUT);
+
 	Serial.begin(115200);
 	Serial1.begin(115200);
+
+	cocoon_leds_init();
+
 	Serial.println("LIS3DH test!");
 	if (! lis.begin(0x18)) {   // change this to 0x19 for alternative i2c address
 		Serial.println("Couldnt start");
@@ -63,9 +61,6 @@ void setup(void) {
 
 	Serial.print("Data rate = "); Serial.print(lis.getDataRate());
 	Serial.println("Hz");
-
-	strip.begin();
-	strip.show(); // Initialize all pixels to 'off'
 
 	//capture the near neutral position of the 200G accerometer..at 12bit or 50% of 0-4095=2048
 		long y2 = 0;
@@ -91,6 +86,9 @@ void setup(void) {
 
 
 void loop() {
+	// Blink to prove that we're alive
+	digitalWrite(BUILTIN_LED_PIN, (blink == 0) ? LOW : HIGH);
+	blink = (blink + 1) & 0x3f;
 
 	currentTime = millis();
 	int averageAcc = 0;
@@ -101,7 +99,6 @@ void loop() {
 		//Serial1.write(inByte);
 		Serial1.write(inByte);
 	}
-
 
 	lis.read();      // get X Y and Z data at once
 	int zg = lis.z;
@@ -136,63 +133,13 @@ void loop() {
 
 	findAverage();
 
-	uint16_t red = (color & 0xff0000) >> 16;
-	uint16_t green = (color & 0x00ff00) >> 8;
-	uint16_t blue = (color & 0x0000ff);
+	cocoon_leds_update();
 
-	/*
-	// Debug: Print R,G,B
-	Serial.print(r);
-	Serial.print(" ");
-	Serial.print(g);
-	Serial.print(" ");
-	Serial.println(b);
-	*/
-
-	// Update the pixels
-	phase += 0.02;
-	for (uint8_t i = 0; i < LEDS_PER_STRIP; i++) {
-		float wave = (sin(i * 0.5f + phase) + 1.0f) * 0.5f;	// 0..1
-		uint16_t brt = MAX_BRIGHT * wave;
-
-		uint32_t r = (red * brt) >> 8;
-		uint32_t g = (green * brt) >> 8;
-		uint32_t b = (blue * brt) >> 8;
-		uint32_t c = (r << 16) | (g << 8) | b;
-
-		// Set the same colors all around
-		uint8_t p = i;
-		if (p < PIXEL_COUNT) strip.setPixelColor(p, c);
-		p = LEDS_PER_STRIP * 2 - i - 1;
-		if (p < PIXEL_COUNT) strip.setPixelColor(p, c);
-		p = LEDS_PER_STRIP * 2 + i;
-		if (p < PIXEL_COUNT) strip.setPixelColor(p, c);
-		p = LEDS_PER_STRIP * 4 - i - 1;
-		if (p < PIXEL_COUNT) strip.setPixelColor(p, c);
-	}
-
-	strip.show();
 
 	if(lastAverageAcc > 4000){ //TAP detected send it to ESP
 		sendTapData();
 
-		// Choose a new random color
-		color = Wheel(random(0,255));
-
-		/*
-		// Convert to r, g, b
-		uint32_t r = (randomColor & 0xff0000) >> 16;
-		uint32_t g = (randomColor & 0x00ff00) >>  8;
-		uint32_t b = (randomColor & 0x0000ff);
-
-		r = (r * MAX_BRIGHT) >> 8;
-		g = (g * MAX_BRIGHT) >> 8;
-		b = (b * MAX_BRIGHT) >> 8;
-
-		// Composite color as 0xRRGGBB
-		uint32_t finalColor = (r << 16) | (g << 8) | b;
-		colorWipe(finalColor, 0);
-		*/
+		cocoon_leds_start_new_color();
 
 		memset(rollingAcc, 0, sizeof(rollingAcc)); //clear array so it doesn't take forever to normalize
 
@@ -222,42 +169,10 @@ void findAverage(){
 // sends data to ESP at 115200
 void sendTapData(){
 	Serial1.write('['); //start value
-	Serial1.write(COCCOON);
+	Serial1.write(COCOON);
 	char tapValue = map(lastAverageAcc, 2000,6000,0,255);
 	Serial.print("tapValue: ");
 	Serial.println(tapValue);
 	Serial1.write(tapValue);
 	Serial1.write(']');  //end value
-}
-
-
-// Fill the dots one after the other with a color
-void colorWipe(uint32_t c, uint8_t wait) {
-	for(uint16_t i=0; i<strip.numPixels(); i++) {
-		strip.setPixelColor(i, c);
-
-		if (wait > 0) {
-			strip.show();
-			delay(wait);
-		}
-	}
-
-	if (wait == 0) {
-		strip.show();
-	}
-}
-
-// Input a value 0 to 255 to get a color value.
-// The colours are a transition r - g - b - back to r.
-uint32_t Wheel(byte WheelPos) {
-	WheelPos = 255 - WheelPos;
-	if(WheelPos < 85) {
-		return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
-	}
-	if(WheelPos < 170) {
-		WheelPos -= 85;
-		return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
-	}
-	WheelPos -= 170;
-	return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
 }
