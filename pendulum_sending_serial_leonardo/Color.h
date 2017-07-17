@@ -14,6 +14,10 @@ inline float lerp(float a, float b, float p) {
 	return a + (b - a) * p;
 }
 
+inline float randf() {
+	return random(0, 0xffffff) * (1.0f / 0xffffff);
+}
+
 struct RGB8 {
 	uint_fast8_t r;
 	uint_fast8_t g;
@@ -26,17 +30,39 @@ struct RGB {
 	float b;
 };
 
+inline RGB lerpRGB(RGB c0, RGB c1, float p) {
+	return (RGB){
+		lerp(c0.r, c1.r, p),
+		lerp(c0.g, c1.g, p),
+		lerp(c0.b, c1.b, p)
+	};
+}
+
+inline uint32_t rgbToUint32(RGB rgb) {
+	return ((uint32_t)(rgb.r * 0xff) << 16) |
+	       ((uint32_t)(rgb.g * 0xff) << 8)  |
+				  (uint32_t)(rgb.b * 0xff);
+}
+
 struct HSV {
 	float h;
 	float s;
 	float v;
 };
 
+inline HSV lerpHSV(HSV c0, HSV c1, float p) {
+	return (HSV){
+		lerp(c0.h, c1.h, p),
+		lerp(c0.s, c1.s, p),
+		lerp(c0.v, c1.v, p)
+	};
+}
+
 // Convert HSV values to RGB
 // All arguments are in range 0..1 . They are not checked for sane values!
 // Return values are in range 0..1
 // Ported from: http://code.activestate.com/recipes/576554-covert-color-space-from-hsv-to-rgb-and-rgb-to-hsv/
-RGB hsv2rgb( float hF, float sF, float vF ) {
+RGB hsv2rgb (float hF, float sF, float vF) {
   // Expand H by 6 times for the 6 color regions. Wrap the remainder to 0..1
   float hWrap = (hF*6.0);
   hWrap = hWrap - floor(hWrap);  // floating point remainder. 0..1 for each of the 6 color regions
