@@ -20,7 +20,7 @@
 #define MAX_BRIGHT          (0x7f)
 
 #define PALETTE_STEPS       (10)
-#define BAND_SPREAD         (0.32f)
+#define BAND_SPREAD         (0.22f)
 
 #define MASTER_SPEED        (1.0f)
 #define EMIT_SPEED          (0.0151f * MASTER_SPEED)
@@ -30,7 +30,7 @@ Adafruit_NeoPixel strip;
 
 HSV palette[PALETTE_STEPS];
 
-const float CENTER_STAGGER = 0.06f * (0.25f / BAND_SPREAD);
+const float CENTER_STAGGER = 0.05f * (0.22f / BAND_SPREAD);
 float center_phases[4] = {CENTER_STAGGER * 0, CENTER_STAGGER * 1, CENTER_STAGGER * 2, CENTER_STAGGER * 3};
 
 const float EMIT_STAGGER = 0.1f;
@@ -86,7 +86,7 @@ void cocoon_leds_update() {
 
 			bandsUntilChangeValue--;
 			if (bandsUntilChangeValue <= 0) {
-				bandsUntilChangeValue = random(2, 4);
+				bandsUntilChangeValue = random(1, 4);
 
 				bool isOn = palette[0].v > 0.1f;
 				palette[0].v = (isOn ? 0.0f : 1.0f);
@@ -94,7 +94,7 @@ void cocoon_leds_update() {
 
 			// Rando brightnesses
 			if (palette[0].v > 0.1f) {
-				palette[0].v = lerp(0.25f, 1.0f, randf());
+				palette[0].v = lerp(0.6f, 1.0f, randf());
 			}
 
 		}
