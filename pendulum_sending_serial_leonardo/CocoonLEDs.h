@@ -22,16 +22,19 @@
 #define PALETTE_STEPS       (10)
 #define COLOR_SPREAD        (0.15f)
 
-#define MASTER_SPEED        (1.0f)
+#define MASTER_SPEED        (0.8f)
 #define EMIT_SPEED          (0.0131f * MASTER_SPEED)
 #define CENTER_DRIFT_SPEED  (0.0007f * MASTER_SPEED)
 
 Adafruit_NeoPixel strip;
 
-float center_phase = 0;
-
 HSV palette[PALETTE_STEPS];
-float emit_phase = 0.0f;	// Counts down [1..0] then wraps around
+
+const float CENTER_STAGGER = 0.06f;
+float center_phases[4] = {CENTER_STAGGER * 0, CENTER_STAGGER * 1, CENTER_STAGGER * 2, CENTER_STAGGER * 3};
+
+const float EMIT_STAGGER = 0.1f;
+float emit_phases[4] = {EMIT_STAGGER * 1, EMIT_STAGGER * 3, EMIT_STAGGER * 2, EMIT_STAGGER * 0};	// Counts down [1..0] then wraps around
 
 unsigned long lastMicros = 0;
 
@@ -55,100 +58,73 @@ void cocoon_leds_update() {
 	lastMicros = now;
 	float timeMult = elapsed * (1.0f / 16666.667f);	// Animations are cooked at 60fps
 
-	// Palette emits out from center.
-	emit_phase -= EMIT_SPEED * timeMult;
-	if (emit_phase <= 0.0f) {	// Time to choose a new color?
-		emit_phase += 1.0f;
+	for (uint8_t side = 0; side < 4; side++) {
+		// Palette emits out from center.
+		float target = emit_phases[side] -= EMIT_SPEED * timeMult;
 
-		// Bucket brigade: Shift the colors down
-		for (int8_t i = PALETTE_STEPS - 2; i >= 0; i--) {
-			palette[i + 1] = palette[i];
+		if (emit_phases[side] <= 0.0f) {	// Time to choose a new color?
+
+			// Bump up the emit_phases so the color change looks seamless
+			for (uint8_t s = 0; s < 4; s++) {
+				emit_phases[s] += 1.0f;
+			}
+
+			// Bucket brigade: Shift the colors down
+			for (int8_t i = PALETTE_STEPS - 2; i >= 0; i--) {
+				palette[i + 1] = palette[i];
+			}
+
+			// Tweak palette[0], so a new color emerges.
+			uint8_t r = (uint8_t)(random(0, 0xff));
+			if (r & 0x1) {	// change hue
+				palette[0].h += randf() * 0.1 - 0.05;
+			}
+
+			palette[0].s = 0.9;
+
+			palette[0].v = 1.0f - palette[0].v;
 		}
 
-		// Tweak palette[0], so a new color emerges.
-		uint8_t r = (uint8_t)(random(0, 0xff));
-		if (r & 0x1) {	// change hue
-			palette[0].h += randf() * 0.1 - 0.05;
-		}
+		center_phases[side] += CENTER_DRIFT_SPEED * timeMult;
+		if (center_phases[side] >= 1.0f) center_phases[side] -= 1.0f;
 
-		/*
-		if (r & 0x2) {	// change saturation
-			palette[0].s = randf();
-		}
-		*/
-		palette[0].s = 0.9;
+		float center_loc = sin01(center_phases[side] * (float)(2*M_PI));
+		center_loc = lerp(0.2f, 0.8f, center_loc) * LEDS_PER_STRIP;
 
-		/*
-		if (r & 0x4) {	// change value
-			palette[0].v = randf();
-		}
-		*/
-		palette[0].v = 1.0f - palette[0].v;
-	}
+		for (uint8_t i = 0; i < LEDS_PER_STRIP; i++) {
+			float distanceFromCenter = (float)center_loc - (float)i;
+			if (distanceFromCenter < 0.0f) distanceFromCenter *= -1.0f;	// like absf()
 
-	// Update the pixels
-	/*
-	wave_phase += 0.0031f;
-	if (wave_phase >= 1.0f) wave_phase -= 1.0f;
-	*/
+			// For this distance from the center: Get the two adjacent colors
+			float dist = (distanceFromCenter * COLOR_SPREAD) + emit_phases[side];
+			int8_t c0 = constrain(floorf(dist), 0, PALETTE_STEPS - 1);
+			int8_t c1 = constrain(ceilf(dist), 0, PALETTE_STEPS - 1);
 
-	center_phase += CENTER_DRIFT_SPEED * timeMult;
-	if (center_phase >= 1.0f) center_phase -= 1.0f;
+			float decimal = dist - c0;
+			HSV hsv = lerpHSV(palette[c0], palette[c1], decimal);
+			hsv.v *= hsv.v;
 
-	float center_loc = sin01(center_phase * (float)(2*M_PI));
-	center_loc = lerp(0.2f, 0.8f, center_loc) * LEDS_PER_STRIP;
+			uint32_t color = rgbToUint32(
+				hsv2rgb(
+					hsv.h,
+					hsv.s,
+					hsv.v * (MAX_BRIGHT / (float)0xff)
+				)
+			);
 
-	/*
-	uint16_t red = (color & 0xff0000) >> 16;
-	uint16_t green = (color & 0x00ff00) >> 8;
-	uint16_t blue = (color & 0x0000ff);
-	*/
+			// Set the same colors all around
+			uint8_t p = i;
+			if ((side == 0) && (p < PIXEL_COUNT)) strip.setPixelColor(p, color);
+			p = LEDS_PER_STRIP * 2 - i - 1;
+			if ((side == 1) && (p < PIXEL_COUNT)) strip.setPixelColor(p, color);
+			p = LEDS_PER_STRIP * 2 + i;
+			if ((side == 2) && (p < PIXEL_COUNT)) strip.setPixelColor(p, color);
+			p = LEDS_PER_STRIP * 4 - i - 1;
+			if ((side == 3) && (p < PIXEL_COUNT)) strip.setPixelColor(p, color);
 
-	for (uint8_t i = 0; i < LEDS_PER_STRIP; i++) {
-		float distanceFromCenter = (float)center_loc - (float)i;
-		if (distanceFromCenter < 0.0f) distanceFromCenter *= -1.0f;	// like absf()
+		}	// ! each LED
 
-		/*
-		float wave = sin01(wave_phase * (float)(2*M_PI) - distanceFromCenter);
-		wave *= wave;	// somewhat darker
-
-		//wave = max(0, 1.0f - distanceFromCenter);	// testing center location
-
-		uint16_t brt = MAX_BRIGHT * wave;
-
-		uint32_t r = (red * brt) >> 8;
-		uint32_t g = (green * brt) >> 8;
-		uint32_t b = (blue * brt) >> 8;
-		uint32_t c = (r << 16) | (g << 8) | b;
-		*/
-
-		// For this distance from the center: Get the two adjacent colors
-		float dist = (distanceFromCenter * COLOR_SPREAD) + emit_phase;
-		int8_t c0 = constrain(floorf(dist), 0, PALETTE_STEPS - 1);
-		int8_t c1 = constrain(ceilf(dist), 0, PALETTE_STEPS - 1);
-
-		float decimal = dist - c0;
-		HSV hsv = lerpHSV(palette[c0], palette[c1], decimal);
-		hsv.v *= hsv.v;
-
-		uint32_t color = rgbToUint32(
-			hsv2rgb(
-				hsv.h,
-				hsv.s,
-				hsv.v * (MAX_BRIGHT / (float)0xff)
-			)
-		);
-
-		// Set the same colors all around
-		uint8_t p = i;
-		if (p < PIXEL_COUNT) strip.setPixelColor(p, color);
-		p = LEDS_PER_STRIP * 2 - i - 1;
-		if (p < PIXEL_COUNT) strip.setPixelColor(p, color);
-		p = LEDS_PER_STRIP * 2 + i;
-		if (p < PIXEL_COUNT) strip.setPixelColor(p, color);
-		p = LEDS_PER_STRIP * 4 - i - 1;
-		if (p < PIXEL_COUNT) strip.setPixelColor(p, color);
-	}
+	}	// ! each side
 
 	strip.show();
 }
