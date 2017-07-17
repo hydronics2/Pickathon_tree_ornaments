@@ -17,9 +17,10 @@
 #define LED_STRIPS_PIN      (6)
 #define LEDS_PER_STRIP      (18)
 #define PIXEL_COUNT         (LEDS_PER_STRIP * 4)
-#define MAX_BRIGHT          (0xff)
+#define MAX_BRIGHT          (0x7f)
 
 #define PALETTE_STEPS       (10)
+#define COLOR_SPREAD        (0.15f)
 
 Adafruit_NeoPixel strip;
 //uint32_t color;
@@ -132,26 +133,31 @@ void cocoon_leds_update() {
 		*/
 
 		// For this distance from the center: Get the two adjacent colors
-		float dist = (distanceFromCenter * 0.4f) + emit_phase;
+		float dist = (distanceFromCenter * COLOR_SPREAD) + emit_phase;
 		int8_t c0 = constrain(floorf(dist), 0, PALETTE_STEPS - 1);
 		int8_t c1 = constrain(ceilf(dist), 0, PALETTE_STEPS - 1);
 
 		float decimal = dist - c0;
 		HSV hsv = lerpHSV(palette[c0], palette[c1], decimal);
+		hsv.v *= hsv.v;
 
-		uint32_t color = rgbToUint32(hsv2rgb(hsv.h, hsv.s, hsv.v));
+		uint32_t color = rgbToUint32(
+			hsv2rgb(
+				hsv.h,
+				hsv.s,
+				hsv.v * (MAX_BRIGHT / (float)0xff)
+			)
+		);
 
 		// Set the same colors all around
 		uint8_t p = i;
 		if (p < PIXEL_COUNT) strip.setPixelColor(p, color);
-		/*
 		p = LEDS_PER_STRIP * 2 - i - 1;
 		if (p < PIXEL_COUNT) strip.setPixelColor(p, color);
 		p = LEDS_PER_STRIP * 2 + i;
 		if (p < PIXEL_COUNT) strip.setPixelColor(p, color);
 		p = LEDS_PER_STRIP * 4 - i - 1;
 		if (p < PIXEL_COUNT) strip.setPixelColor(p, color);
-		*/
 	}
 
 	strip.show();
