@@ -20,23 +20,25 @@
 #define MAX_BRIGHT          (0x7f)
 
 #define PALETTE_STEPS       (10)
-#define COLOR_SPREAD        (0.15f)
+#define BAND_SPREAD         (0.32f)
 
-#define MASTER_SPEED        (0.8f)
-#define EMIT_SPEED          (0.0131f * MASTER_SPEED)
+#define MASTER_SPEED        (1.0f)
+#define EMIT_SPEED          (0.0151f * MASTER_SPEED)
 #define CENTER_DRIFT_SPEED  (0.0007f * MASTER_SPEED)
 
 Adafruit_NeoPixel strip;
 
 HSV palette[PALETTE_STEPS];
 
-const float CENTER_STAGGER = 0.06f;
+const float CENTER_STAGGER = 0.06f * (0.25f / BAND_SPREAD);
 float center_phases[4] = {CENTER_STAGGER * 0, CENTER_STAGGER * 1, CENTER_STAGGER * 2, CENTER_STAGGER * 3};
 
 const float EMIT_STAGGER = 0.1f;
 float emit_phases[4] = {EMIT_STAGGER * 1, EMIT_STAGGER * 3, EMIT_STAGGER * 2, EMIT_STAGGER * 0};	// Counts down [1..0] then wraps around
 
 unsigned long lastMicros = 0;
+
+int8_t bandsUntilChangeValue = 0;
 
 void cocoon_leds_init(){
 	strip = Adafruit_NeoPixel(PIXEL_COUNT, LED_STRIPS_PIN, NEO_GRB + NEO_KHZ800);
@@ -80,9 +82,21 @@ void cocoon_leds_update() {
 				palette[0].h += randf() * 0.1 - 0.05;
 			}
 
-			palette[0].s = 0.9;
+			palette[0].s = lerp(0.8f, 1.0f, randf());
 
-			palette[0].v = 1.0f - palette[0].v;
+			bandsUntilChangeValue--;
+			if (bandsUntilChangeValue <= 0) {
+				bandsUntilChangeValue = random(2, 4);
+
+				bool isOn = palette[0].v > 0.1f;
+				palette[0].v = (isOn ? 0.0f : 1.0f);
+			}
+
+			// Rando brightnesses
+			if (palette[0].v > 0.1f) {
+				palette[0].v = lerp(0.25f, 1.0f, randf());
+			}
+
 		}
 
 		center_phases[side] += CENTER_DRIFT_SPEED * timeMult;
@@ -96,7 +110,7 @@ void cocoon_leds_update() {
 			if (distanceFromCenter < 0.0f) distanceFromCenter *= -1.0f;	// like absf()
 
 			// For this distance from the center: Get the two adjacent colors
-			float dist = (distanceFromCenter * COLOR_SPREAD) + emit_phases[side];
+			float dist = (distanceFromCenter * BAND_SPREAD) + emit_phases[side];
 			int8_t c0 = constrain(floorf(dist), 0, PALETTE_STEPS - 1);
 			int8_t c1 = constrain(ceilf(dist), 0, PALETTE_STEPS - 1);
 
