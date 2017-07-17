@@ -22,30 +22,18 @@
 #define PALETTE_STEPS       (10)
 #define COLOR_SPREAD        (0.15f)
 
+#define MASTER_SPEED        (1.0f)
+#define EMIT_SPEED          (0.0131f * MASTER_SPEED)
+#define CENTER_DRIFT_SPEED  (0.0007f * MASTER_SPEED)
+
 Adafruit_NeoPixel strip;
-//uint32_t color;
-//float wave_phase = 0;
+
 float center_phase = 0;
 
 HSV palette[PALETTE_STEPS];
 float emit_phase = 0.0f;	// Counts down [1..0] then wraps around
 
-// Input a value 0 to 255 to get a color value.
-// The colours are a transition r - g - b - back to r.
-/*
-uint32_t cocoon_leds_wheel(byte WheelPos) {
-	WheelPos = 255 - WheelPos;
-	if(WheelPos < 85) {
-		return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
-	}
-	if(WheelPos < 170) {
-		WheelPos -= 85;
-		return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
-	}
-	WheelPos -= 170;
-	return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
-}
-*/
+unsigned long lastMicros = 0;
 
 void cocoon_leds_init(){
 	strip = Adafruit_NeoPixel(PIXEL_COUNT, LED_STRIPS_PIN, NEO_GRB + NEO_KHZ800);
@@ -54,19 +42,21 @@ void cocoon_leds_init(){
 }
 
 void cocoon_leds_start_new_color() {
-	// Choose a new random color
-	//color = cocoon_leds_wheel(random(0,255));
-
 	// Choose a random hue
-	float hue = randf();
+	float hueShift = randf() - 0.5f;
 	for (uint8_t i = 0; i < PALETTE_STEPS; i++) {
-		palette[i].h = hue;
+		palette[i].h += hueShift;
 	}
 }
 
 void cocoon_leds_update() {
+	unsigned long now = micros();
+	uint16_t elapsed = (uint16_t)constrain(now - lastMicros, 0, 0xffff);
+	lastMicros = now;
+	float timeMult = elapsed * (1.0f / 16666.667f);	// Animations are cooked at 60fps
+
 	// Palette emits out from center.
-	emit_phase -= 0.0131f;
+	emit_phase -= EMIT_SPEED * timeMult;
 	if (emit_phase <= 0.0f) {	// Time to choose a new color?
 		emit_phase += 1.0f;
 
@@ -102,7 +92,7 @@ void cocoon_leds_update() {
 	if (wave_phase >= 1.0f) wave_phase -= 1.0f;
 	*/
 
-	center_phase += 0.0007f;
+	center_phase += CENTER_DRIFT_SPEED * timeMult;
 	if (center_phase >= 1.0f) center_phase -= 1.0f;
 
 	float center_loc = sin01(center_phase * (float)(2*M_PI));
