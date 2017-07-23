@@ -133,9 +133,6 @@ void loop() {
 
 	findAverage();
 
-	cocoon_leds_update();
-
-
 	if(lastAverageAcc > 4000){ //TAP detected send it to ESP
 		sendTapData();
 
@@ -155,6 +152,8 @@ void loop() {
 		averageHigh = 0;
 		//Serial.println(averageHighLast);
 	}
+
+	cocoon_leds_update(lastAverageAcc);
 }
 
 void findAverage(){

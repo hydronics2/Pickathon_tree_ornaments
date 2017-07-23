@@ -14,6 +14,10 @@ inline float lerp(float a, float b, float p) {
 	return a + (b - a) * p;
 }
 
+inline float clamp(float x, float _min, float _max) {
+	return (x < _min) ? _min : ((x > _max) ? _max : x);
+}
+
 inline float randf() {
 	return random(0, 0xffffff) * (1.0f / 0xffffff);
 }

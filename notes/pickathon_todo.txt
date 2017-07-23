@@ -1,0 +1,5 @@
+- Save battery: Go dark for long periods
+
+- Copy color from neighbor()
+
+- Blackout()

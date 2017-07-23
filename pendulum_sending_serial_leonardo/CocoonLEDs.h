@@ -17,7 +17,7 @@
 #define LED_STRIPS_PIN      (6)
 #define LEDS_PER_STRIP      (18)
 #define PIXEL_COUNT         (LEDS_PER_STRIP * 4)
-#define MAX_BRIGHT          (0x3f)
+#define MAX_BRIGHT          (0x7f)
 #define DO_SPIRAL_LIGHTS    (false)
 
 #define PALETTE_STEPS       (10)
@@ -26,6 +26,12 @@
 #define MASTER_SPEED        (1.0f)
 #define EMIT_SPEED          (0.0151f * MASTER_SPEED)
 #define CENTER_DRIFT_SPEED  (0)
+#define BRIGHTNESS_BUCKETS  (20)
+#define BUCKET_MICROS       (100 * 1000)
+
+// When the wind blows: illuminate at about 50%?
+#define WIND_MIN            (250)
+#define WIND_MAX            (1500)
 
 Adafruit_NeoPixel strip;
 
@@ -41,7 +47,19 @@ unsigned long lastMicros = 0;
 
 int8_t bandsUntilChangeValue = 0;
 
+// Battery savings: Should be dim/off most of the time.
+// During an on-cycle: illuminate at about 25%.
+// When the wind blows: illuminate at about 50%?
+// Human interaction:
+float brightnessTarget = 1.0f;
+float brightnessBuckets[BRIGHTNESS_BUCKETS];
+int32_t bucketMicrosRemaining = 0;
+
 void cocoon_leds_init(){
+	for (uint8_t i = 0; i < BRIGHTNESS_BUCKETS; i++) {
+		brightnessBuckets[i] = 1.0f;
+	}
+
 	strip = Adafruit_NeoPixel(PIXEL_COUNT, LED_STRIPS_PIN, NEO_GRB + NEO_KHZ800);
 	strip.begin();
 	strip.show(); // Initialize all pixels to 'off'
@@ -55,11 +73,26 @@ void cocoon_leds_start_new_color() {
 	}
 }
 
-void cocoon_leds_update() {
+void cocoon_leds_update(int lastAverageAcc) {
 	unsigned long now = micros();
 	uint16_t elapsed = (uint16_t)constrain(now - lastMicros, 0, 0xffff);
 	lastMicros = now;
 	float timeMult = elapsed * (1.0f / 16666.667f);	// Animations are cooked at 60fps
+
+	brightnessTarget = (float)(lastAverageAcc - WIND_MIN) / (WIND_MAX - WIND_MIN);
+	brightnessTarget = clamp(brightnessTarget, 0.0f, 1.0f);
+
+	// Bucket brigade
+	bucketMicrosRemaining-= elapsed;
+	if (bucketMicrosRemaining <= 0) {
+		bucketMicrosRemaining += BUCKET_MICROS;
+
+		for (int8_t i = BRIGHTNESS_BUCKETS - 1; i > 0; i--) {
+			brightnessBuckets[i] = brightnessBuckets[i - 1];
+		}
+
+		brightnessBuckets[0] = lerp(brightnessBuckets[0], brightnessTarget, 0.01f);
+	}
 
 	for (uint8_t side = 0; side < 4; side++) {
 		// Palette emits out from center.
@@ -124,6 +157,9 @@ void cocoon_leds_update() {
 			float decimal = dist - c0;
 			HSV hsv = lerpHSV(palette[c0], palette[c1], decimal);
 			hsv.v *= hsv.v;
+
+			// FIXME lame
+			hsv.v *= brightnessTarget;
 
 			uint32_t color = rgbToUint32(
 				hsv2rgb(
