@@ -17,14 +17,15 @@
 #define LED_STRIPS_PIN      (6)
 #define LEDS_PER_STRIP      (18)
 #define PIXEL_COUNT         (LEDS_PER_STRIP * 4)
-#define MAX_BRIGHT          (0x7f)
+#define MAX_BRIGHT          (0x3f)
+#define DO_SPIRAL_LIGHTS    (false)
 
 #define PALETTE_STEPS       (10)
 #define BAND_SPREAD         (0.22f)
 
 #define MASTER_SPEED        (1.0f)
 #define EMIT_SPEED          (0.0151f * MASTER_SPEED)
-#define CENTER_DRIFT_SPEED  (0.0007f * MASTER_SPEED)
+#define CENTER_DRIFT_SPEED  (0)
 
 Adafruit_NeoPixel strip;
 
@@ -106,6 +107,12 @@ void cocoon_leds_update() {
 		center_loc = lerp(0.2f, 0.8f, center_loc) * LEDS_PER_STRIP;
 
 		for (uint8_t i = 0; i < LEDS_PER_STRIP; i++) {
+			if (DO_SPIRAL_LIGHTS) {
+				if (((side + i) % 4) != 0) continue;	// light every 4th LED
+			} else {
+				if (side != 0) break;	// only light one strip
+			}
+
 			float distanceFromCenter = (float)center_loc - (float)i;
 			if (distanceFromCenter < 0.0f) distanceFromCenter *= -1.0f;	// like absf()
 
