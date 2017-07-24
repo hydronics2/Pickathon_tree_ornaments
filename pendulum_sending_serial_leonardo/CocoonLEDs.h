@@ -86,16 +86,19 @@ void cocoon_do_color_tween(HSV hsv, int delayMicros) {
 		paletteTweenDelay[p] = p * delayMult + delayMicros;
 
 		// Inject a little randomness to the palette
-		hsv.h += (randf() - 0.5f) * 0.1f;
+		hsv.h += (randf() - 0.5f) * 0.2f;
 		hsv.s += (randf() - 0.5f) * 0.2f;
 		hsv.s = clamp(hsv.s, 0.0f, 1.0f);
-		hsv.v += (randf() - 0.5f) * 0.2f;
+		hsv.v += (randf() - 0.5f) * 0.3f;
 		hsv.v = clamp(hsv.v, 0.0f, 1.0f);
 		paletteDest[p] = hsv;
 	}
 
 	// Immediately go full brightness
 	bright = 1.0f;
+
+	// We're tweening fully bright, so immediately go dark next
+	bandsUntilChangeValue = 1;
 }
 
 void cocoon_leds_start_new_color() {

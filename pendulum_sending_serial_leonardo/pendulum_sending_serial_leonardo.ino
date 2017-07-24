@@ -14,6 +14,7 @@
 #include "CocoonLEDs.h"
 
 #define COCOON         (9)
+#define DEV_BLINK      (false)
 
 // I2C
 Adafruit_LIS3DH lis = Adafruit_LIS3DH();
@@ -87,6 +88,7 @@ void setup(void) {
 
 void loop() {
 	// Blink to prove that we're alive
+	if (!DEV_BLINK) blink = 1;
 	digitalWrite(BUILTIN_LED_PIN, (blink == 0) ? LOW : HIGH);
 	blink = (blink + 1) & 0x3f;
 
