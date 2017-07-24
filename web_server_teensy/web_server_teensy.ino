@@ -23,8 +23,8 @@ EthernetServer server(80);
 
 void setup() {
   // Open serial communications and wait for port to open:
-  Serial.begin(115200);
-  Serial1.begin(115200);
+  Serial.begin(9600);
+  Serial1.begin(9600);
 
 
   // start the Ethernet connection and the server:
