@@ -1,4 +1,4 @@
-- Save battery: Go dark for long periods
+- On wind: go faster
 
 - Copy color from neighbor()
 

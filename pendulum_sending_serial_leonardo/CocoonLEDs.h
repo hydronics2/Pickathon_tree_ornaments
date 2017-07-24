@@ -21,17 +21,21 @@
 #define DO_SPIRAL_LIGHTS    (false)
 
 #define PALETTE_STEPS       (10)
-#define BAND_SPREAD         (0.22f)
+#define BAND_SPREAD         (0.23f)
 
 #define MASTER_SPEED        (1.0f)
 #define EMIT_SPEED          (0.0151f * MASTER_SPEED)
 #define CENTER_DRIFT_SPEED  (0)
-#define BRIGHTNESS_BUCKETS  (20)
-#define BUCKET_MICROS       (100 * 1000)
+#define BRIGHT_MICROS       (8 * 1000)
 
 // When the wind blows: illuminate at about 50%?
-#define WIND_MIN            (250)
+#define WIND_MIN            (300)
 #define WIND_MAX            (1500)
+#define WIND_BRIGHTNESS_F   (0.6f)
+
+#define IDLE_BRIGHT_TIME_MIN (0.0005f)
+#define IDLE_BRIGHT_TIME_MAX (0.001f)
+#define IDLE_BRIGHTNESS_F    (0.25f)
 
 Adafruit_NeoPixel strip;
 
@@ -51,15 +55,15 @@ int8_t bandsUntilChangeValue = 0;
 // During an on-cycle: illuminate at about 25%.
 // When the wind blows: illuminate at about 50%?
 // Human interaction:
-float brightnessTarget = 1.0f;
-float brightnessBuckets[BRIGHTNESS_BUCKETS];
-int32_t bucketMicrosRemaining = 0;
+float brightIdle = 1.0f;
+float brightIdleAdder = 0.0f;
+float brightWind = 0.0f;
+float windAmt = 0.0f;
+
+float bright = 1.0f;
+int32_t brightMicrosRemaining = 0;	// update brightness when this flips below zero
 
 void cocoon_leds_init(){
-	for (uint8_t i = 0; i < BRIGHTNESS_BUCKETS; i++) {
-		brightnessBuckets[i] = 1.0f;
-	}
-
 	strip = Adafruit_NeoPixel(PIXEL_COUNT, LED_STRIPS_PIN, NEO_GRB + NEO_KHZ800);
 	strip.begin();
 	strip.show(); // Initialize all pixels to 'off'
@@ -79,24 +83,32 @@ void cocoon_leds_update(int lastAverageAcc) {
 	lastMicros = now;
 	float timeMult = elapsed * (1.0f / 16666.667f);	// Animations are cooked at 60fps
 
-	brightnessTarget = (float)(lastAverageAcc - WIND_MIN) / (WIND_MAX - WIND_MIN);
-	brightnessTarget = clamp(brightnessTarget, 0.0f, 1.0f);
-
 	// Bucket brigade
-	bucketMicrosRemaining-= elapsed;
-	if (bucketMicrosRemaining <= 0) {
-		bucketMicrosRemaining += BUCKET_MICROS;
+	brightMicrosRemaining -= elapsed;
+	if (brightMicrosRemaining <= 0) {
+		brightMicrosRemaining += BRIGHT_MICROS;
 
-		for (int8_t i = BRIGHTNESS_BUCKETS - 1; i > 0; i--) {
-			brightnessBuckets[i] = brightnessBuckets[i - 1];
+		// Update idle brightness
+		if (brightIdle >= 1.0f) {
+			brightIdleAdder = -lerp(IDLE_BRIGHT_TIME_MIN, IDLE_BRIGHT_TIME_MAX, randf());
+		} else if (brightIdle <= -1.0f) {
+			brightIdleAdder = lerp(IDLE_BRIGHT_TIME_MIN, IDLE_BRIGHT_TIME_MAX, randf());
 		}
+		brightIdle += brightIdleAdder;
 
-		brightnessBuckets[0] = lerp(brightnessBuckets[0], brightnessTarget, 0.01f);
+		// Update brightness target
+		windAmt = (float)(lastAverageAcc - WIND_MIN) / (WIND_MAX - WIND_MIN);
+		windAmt = clamp(windAmt, 0.0f, 1.0f);
+		brightWind = windAmt * WIND_BRIGHTNESS_F;
+
+		float brightTarget = max(brightWind, brightIdle * IDLE_BRIGHTNESS_F);
+
+		bright = lerp(bright, brightTarget, 0.023f);
 	}
 
 	for (uint8_t side = 0; side < 4; side++) {
 		// Palette emits out from center.
-		float target = emit_phases[side] -= EMIT_SPEED * timeMult;
+		float target = emit_phases[side] -= EMIT_SPEED * timeMult * lerp(1.0f, 3.0f, windAmt);
 
 		if (emit_phases[side] <= 0.0f) {	// Time to choose a new color?
 
@@ -158,8 +170,8 @@ void cocoon_leds_update(int lastAverageAcc) {
 			HSV hsv = lerpHSV(palette[c0], palette[c1], decimal);
 			hsv.v *= hsv.v;
 
-			// FIXME lame
-			hsv.v *= brightnessTarget;
+			// Apply brightness
+			hsv.v *= bright;
 
 			uint32_t color = rgbToUint32(
 				hsv2rgb(
