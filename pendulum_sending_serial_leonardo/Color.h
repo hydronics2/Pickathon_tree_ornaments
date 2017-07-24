@@ -96,4 +96,48 @@ RGB hsv2rgb (float hF, float sF, float vF) {
   return (RGB){0,0,0};  // sanity escape
 };
 
+/*
+HSV rgb2hsv (uint32_t rgb) {
+	uint8_t r = (uint8_t)((rgb & 0xff0000) >> 16);
+	uint8_t g = (uint8_t)((rgb & 0x00ff00) >> 8);
+	uint8_t b = (uint8_t)((rgb & 0x0000ff));
+
+	float inR = r * (1.0f / 0xff);
+	float inG = g * (1.0f / 0xff);
+	float inB = b * (1.0f / 0xff);
+
+  float outH, outS, outV;
+  float delta;
+
+  float _min = min( inR, min( inG, inB ));
+  float _max = max( inR, max( inG, inB ));
+
+  delta = _max - _min;
+
+  // Grayscale / black / white?
+  if( delta==0.0 ) {
+    return (HSV){ _max, _max, _max };
+  }
+
+  outS = (delta / _max);               // Saturation
+  outV = _max;                           // Value
+
+  if( inR == _max ) {
+    outH = ( inG - inB ) / delta;        // between yellow & magenta
+  } else if( inG >= _max ) {
+    outH = 2.0 + ( inB - inR ) / delta;  // between cyan & yellow
+  } else {
+    outH = 4.0 + ( inR - inG ) / delta;  // between magenta & cyan
+  }
+
+  outH *= (1.0/6.0);  // range: 0..1
+
+  if( outH < 0.0 ) {
+    outH += 1.0;
+  }
+
+  return (HSV){ outH, outS, outV };
+}
+*/
+
 #endif

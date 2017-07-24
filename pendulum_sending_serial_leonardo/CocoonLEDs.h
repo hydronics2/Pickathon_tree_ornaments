@@ -14,28 +14,30 @@
 #include <Adafruit_NeoPixel.h>
 #include "Color.h"
 
-#define LED_STRIPS_PIN      (6)
-#define LEDS_PER_STRIP      (18)
-#define PIXEL_COUNT         (LEDS_PER_STRIP * 4)
-#define MAX_BRIGHT          (0x7f)
-#define DO_SPIRAL_LIGHTS    (false)
+#define LED_STRIPS_PIN        (6)
+#define LEDS_PER_STRIP        (18)
+#define PIXEL_COUNT           (LEDS_PER_STRIP * 4)
+#define MAX_BRIGHT            (0x7f)
+#define DO_SPIRAL_LIGHTS      (false)
 
-#define PALETTE_STEPS       (10)
-#define BAND_SPREAD         (0.23f)
+#define PALETTE_STEPS         (10)
+#define BAND_SPREAD           (0.23f)
 
-#define MASTER_SPEED        (1.0f)
-#define EMIT_SPEED          (0.0151f * MASTER_SPEED)
-#define CENTER_DRIFT_SPEED  (0)
-#define BRIGHT_MICROS       (8 * 1000)
+#define MASTER_SPEED          (1.0f)
+#define EMIT_SPEED            (0.0151f * MASTER_SPEED)
+#define CENTER_DRIFT_SPEED    (0)
+#define BRIGHT_MICROS         (8 * 1000)
 
 // When the wind blows: illuminate at about 50%?
-#define WIND_MIN            (250)
-#define WIND_MAX            (1500)
-#define WIND_BRIGHTNESS_F   (0.5f)
+#define WIND_MIN              (250 >> 1)
+#define WIND_MAX              (1500 >> 1)
+#define WIND_BRIGHTNESS_F     (0.5f)
 
-#define IDLE_BRIGHT_TIME_MIN (0.0005f)
-#define IDLE_BRIGHT_TIME_MAX (0.001f)
-#define IDLE_BRIGHTNESS_F    (0.23f)
+#define IDLE_BRIGHT_TIME_MIN  (0.0005f)
+#define IDLE_BRIGHT_TIME_MAX  (0.001f)
+#define IDLE_BRIGHTNESS_F     (0.23f)
+
+#define BLACKOUT_MICROS       (3 * 1000000)
 
 Adafruit_NeoPixel strip;
 
@@ -65,7 +67,11 @@ float brightWind = 0.0f;
 float windAmt = 0.0f;
 
 float bright = 1.0f;
+float lowBright = 0.0f;
 int32_t brightMicrosRemaining = 0;	// update brightness when this flips below zero
+
+int32_t blackoutDelay = 0;
+int32_t blackoutMicrosRemaining = 0;
 
 void cocoon_leds_init(){
 	for (int8_t i = 0; i < PALETTE_STEPS; i++) {
@@ -78,7 +84,15 @@ void cocoon_leds_init(){
 	strip.show(); // Initialize all pixels to 'off'
 }
 
-void cocoon_do_color_tween(HSV hsv, int delayMicros) {
+void cocoon_do_color_tween(uint32_t hsv32, int delayMicros) {
+	if (blackoutMicrosRemaining > 0) return;	// Blackout? Do nothing.
+
+	HSV hsv = (HSV){
+		((hsv32 & 0xff0000) >> 16) / 255.0f,
+		((hsv32 & 0x00ff00) >>  8) / 255.0f,
+		((hsv32 & 0x0000ff)      ) / 255.0f
+	};
+
 	int delayMult = lerp(300, 500, randf()) * 1000;
 
 	for (int8_t p = 0; p < PALETTE_STEPS; p++) {
@@ -90,25 +104,38 @@ void cocoon_do_color_tween(HSV hsv, int delayMicros) {
 		hsv.s += (randf() - 0.5f) * 0.2f;
 		hsv.s = clamp(hsv.s, 0.0f, 1.0f);
 		hsv.v += (randf() - 0.5f) * 0.3f;
-		hsv.v = clamp(hsv.v, 0.0f, 1.0f);
+		hsv.v = clamp(hsv.v, 0.5f, 1.0f);
 		paletteDest[p] = hsv;
 	}
-
-	// Immediately go full brightness
-	bright = 1.0f;
 
 	// We're tweening fully bright, so immediately go dark next
 	bandsUntilChangeValue = 1;
 }
 
 void cocoon_leds_start_new_color() {
+	if (blackoutMicrosRemaining > 0) return;	// Blackout? Do nothing.
+
 	// Choose a random hue
 	HSV hsv = palette[0];
 	hsv.h += randf() - 0.5f;
 	hsv.s = lerp(0.5f, 1.0f, randf());
 	hsv.v = lerp(0.6f, 1.0f, randf());
+}
 
-	cocoon_do_color_tween(hsv, 0);
+uint32_t cocoon_get_current_color() {
+	if (blackoutMicrosRemaining > 0) return 0x0;
+
+	HSV hsv = palette[0];
+	return (
+		(((uint32_t)(hsv.h * 0xff)) << 16) |
+		(((uint32_t)(hsv.s * 0xff)) <<  8) |
+		(((uint32_t)(hsv.v * 0xff)))
+	);
+}
+
+void cocoon_do_blackout(int delayMicros) {
+	blackoutDelay = delayMicros;
+	blackoutMicrosRemaining = BLACKOUT_MICROS;
 }
 
 void cocoon_leds_update(int lastAverageAcc) {
@@ -117,15 +144,15 @@ void cocoon_leds_update(int lastAverageAcc) {
 	lastMicros = now;
 	float timeMult = elapsed * (1.0f / 16666.667f);	// Animations are cooked at 60fps
 
-	// Bucket brigade
 	brightMicrosRemaining -= elapsed;
-	if (brightMicrosRemaining <= 0) {
+
+	while (brightMicrosRemaining <= 0) {
 		brightMicrosRemaining += BRIGHT_MICROS;
 
 		// Update idle brightness
 		if (brightIdle >= 1.0f) {
 			brightIdleAdder = -lerp(IDLE_BRIGHT_TIME_MIN, IDLE_BRIGHT_TIME_MAX, randf());
-		} else if (brightIdle <= -1.0f) {
+		} else if (brightIdle <= -2.0f) {
 			brightIdleAdder = lerp(IDLE_BRIGHT_TIME_MIN, IDLE_BRIGHT_TIME_MAX, randf());
 		}
 		brightIdle += brightIdleAdder;
@@ -137,9 +164,20 @@ void cocoon_leds_update(int lastAverageAcc) {
 
 		float brightTarget = max(brightWind, brightIdle * IDLE_BRIGHTNESS_F);
 
-		bright = lerp(bright, brightTarget, 0.023f);
+		// Blackout
+		if (blackoutDelay > 0) {
+			blackoutDelay -= elapsed;
 
-		// Apply color tween, if any.
+		} else if (blackoutMicrosRemaining > 0) {
+			brightTarget = 0;
+			blackoutMicrosRemaining -= elapsed;
+		}
+
+		float brightSpeed = 0.023f * ((blackoutMicrosRemaining > 0) ? 10 : 1);
+		bright = lerp(bright, brightTarget, brightSpeed);
+		lowBright = 0.0f;//max(0.0f, bright - 0.75f);
+
+		// Apply color tween(s), if any.
 		for (int8_t p = 0; p < PALETTE_STEPS; p++) {
 			float prog = (float)p / PALETTE_STEPS;
 			float ratio = lerp(0.02, 0.0001, prog);
@@ -222,7 +260,7 @@ void cocoon_leds_update(int lastAverageAcc) {
 			hsv.v *= hsv.v;
 
 			// Apply brightness
-			hsv.v *= bright;
+			hsv.v = lerp(lowBright, bright, hsv.v);
 
 			uint32_t color = rgbToUint32(
 				hsv2rgb(

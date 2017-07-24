@@ -1,6 +1,10 @@
 - Transfer colors to neighbors?
 
 	- On hit: Choose a new color. Hit cocoon, and neighbors, tween to this color.
-	
+
+		- What is the hit threshold?
+
+		1000
+		3500
 
 - Blackout()

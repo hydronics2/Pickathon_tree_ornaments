@@ -13,8 +13,10 @@
 #include <Adafruit_Sensor.h>
 #include "CocoonLEDs.h"
 
-#define COCOON         (9)
-#define DEV_BLINK      (false)
+#define COCOON               (9)
+#define TAP_THRESHOLD        (1000)
+#define BLACKOUT_THRESHOLD   (2000)
+#define DEV_BLINK            (false)
 
 // I2C
 Adafruit_LIS3DH lis = Adafruit_LIS3DH();
@@ -40,6 +42,9 @@ const uint8_t BUILTIN_LED_PIN = 17;
 void setup(void) {
 	pinMode(BUILTIN_LED_PIN, OUTPUT);
 
+	// Generate numbers with randomness
+	randomSeed(analogRead(0) << 10 | analogRead(1));
+
 	Serial.begin(115200);
 	Serial1.begin(115200);
 
@@ -52,7 +57,7 @@ void setup(void) {
 	}
 	Serial.println("LIS3DH found!");
 
-	lis.setRange(LIS3DH_RANGE_2_G);   // 2, 4, 8 or 16 G!
+	lis.setRange(LIS3DH_RANGE_4_G);   // 2, 4, 8 or 16 G!
 
 	//1, 10, 25, 50, 100, 200, 400_HZ, LOWPOWER_1K6HZ, _5KHZ
 	lis.setDataRate(LIS3DH_DATARATE_400_HZ);
@@ -135,10 +140,22 @@ void loop() {
 
 	findAverage();
 
-	if(lastAverageAcc > 4000){ //TAP detected send it to ESP
+	if(lastAverageAcc > TAP_THRESHOLD){ //TAP detected send it to ESP
+
+		// Hard hit? Do a blackout
+		if (lastAverageAcc > BLACKOUT_THRESHOLD) {
+			cocoon_do_blackout(0);
+
+			memset(rollingAcc, 0, sizeof(rollingAcc)); //clear array so it doesn't take forever to normalize
+
+			return;
+		}
+
 		sendTapData();
 
 		cocoon_leds_start_new_color();
+		uint32_t color = cocoon_get_current_color();
+		cocoon_do_color_tween(color, 0);
 
 		memset(rollingAcc, 0, sizeof(rollingAcc)); //clear array so it doesn't take forever to normalize
 
