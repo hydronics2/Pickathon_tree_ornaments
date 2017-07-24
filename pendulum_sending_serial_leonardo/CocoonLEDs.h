@@ -40,6 +40,8 @@
 Adafruit_NeoPixel strip;
 
 HSV palette[PALETTE_STEPS];
+float hueChanges[PALETTE_STEPS];
+float satChanges[PALETTE_STEPS];
 
 const float CENTER_STAGGER = 0.05f * (0.22f / BAND_SPREAD);
 float center_phases[4] = {CENTER_STAGGER * 0, CENTER_STAGGER * 1, CENTER_STAGGER * 2, CENTER_STAGGER * 3};
@@ -64,6 +66,11 @@ float bright = 1.0f;
 int32_t brightMicrosRemaining = 0;	// update brightness when this flips below zero
 
 void cocoon_leds_init(){
+	for (int8_t i = 0; i < PALETTE_STEPS; i++) {
+		hueChanges[i] = 0;
+		satChanges[i] = 0;
+	}
+
 	strip = Adafruit_NeoPixel(PIXEL_COUNT, LED_STRIPS_PIN, NEO_GRB + NEO_KHZ800);
 	strip.begin();
 	strip.show(); // Initialize all pixels to 'off'
@@ -73,7 +80,8 @@ void cocoon_leds_start_new_color() {
 	// Choose a random hue
 	float hueShift = randf() - 0.5f;
 	for (uint8_t i = 0; i < PALETTE_STEPS; i++) {
-		palette[i].h += hueShift;
+		hueChanges[i] = hueShift;
+		satChanges[i] = 1.0f;
 	}
 }
 
@@ -104,6 +112,20 @@ void cocoon_leds_update(int lastAverageAcc) {
 		float brightTarget = max(brightWind, brightIdle * IDLE_BRIGHTNESS_F);
 
 		bright = lerp(bright, brightTarget, 0.023f);
+
+		// Apply hue changes
+		for (int8_t p = 0; p < PALETTE_STEPS; p++) {
+			float prog = (float)p / PALETTE_STEPS;
+			float ratio = lerp(0.05, 0.0001, prog);
+
+			// Reduce hueChanges[], move the amount onto palette[]
+			float changeH = hueChanges[p] * ratio;
+			float changeS = satChanges[p] * ratio;
+			hueChanges[p] -= changeH;
+			palette[p].h += changeH;
+			satChanges[p] -= changeS;
+			palette[p].s = min(1.0, palette[p].s + changeS);
+		}
 	}
 
 	for (uint8_t side = 0; side < 4; side++) {

@@ -1,4 +1,5 @@
 - On wind: go faster
+	- Better color changes
 
 - Copy color from neighbor()
 
