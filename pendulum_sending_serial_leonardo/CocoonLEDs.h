@@ -29,19 +29,21 @@
 #define BRIGHT_MICROS       (8 * 1000)
 
 // When the wind blows: illuminate at about 50%?
-#define WIND_MIN            (300)
+#define WIND_MIN            (250)
 #define WIND_MAX            (1500)
-#define WIND_BRIGHTNESS_F   (0.6f)
+#define WIND_BRIGHTNESS_F   (0.5f)
 
 #define IDLE_BRIGHT_TIME_MIN (0.0005f)
 #define IDLE_BRIGHT_TIME_MAX (0.001f)
-#define IDLE_BRIGHTNESS_F    (0.25f)
+#define IDLE_BRIGHTNESS_F    (0.23f)
 
 Adafruit_NeoPixel strip;
 
 HSV palette[PALETTE_STEPS];
-float hueChanges[PALETTE_STEPS];
-float satChanges[PALETTE_STEPS];
+
+float paletteTween[PALETTE_STEPS];
+HSV paletteDest[PALETTE_STEPS];
+float paletteTweenDelay[PALETTE_STEPS];
 
 const float CENTER_STAGGER = 0.05f * (0.22f / BAND_SPREAD);
 float center_phases[4] = {CENTER_STAGGER * 0, CENTER_STAGGER * 1, CENTER_STAGGER * 2, CENTER_STAGGER * 3};
@@ -67,8 +69,8 @@ int32_t brightMicrosRemaining = 0;	// update brightness when this flips below ze
 
 void cocoon_leds_init(){
 	for (int8_t i = 0; i < PALETTE_STEPS; i++) {
-		hueChanges[i] = 0;
-		satChanges[i] = 0;
+		paletteTween[i] = 0;
+		paletteTweenDelay[i] = 0;
 	}
 
 	strip = Adafruit_NeoPixel(PIXEL_COUNT, LED_STRIPS_PIN, NEO_GRB + NEO_KHZ800);
@@ -76,13 +78,34 @@ void cocoon_leds_init(){
 	strip.show(); // Initialize all pixels to 'off'
 }
 
+void cocoon_do_color_tween(HSV hsv, int delayMicros) {
+	int delayMult = lerp(300, 500, randf()) * 1000;
+
+	for (int8_t p = 0; p < PALETTE_STEPS; p++) {
+		paletteTween[p] = 1.0f;
+		paletteTweenDelay[p] = p * delayMult + delayMicros;
+
+		// Inject a little randomness to the palette
+		hsv.h += (randf() - 0.5f) * 0.1f;
+		hsv.s += (randf() - 0.5f) * 0.2f;
+		hsv.s = clamp(hsv.s, 0.0f, 1.0f);
+		hsv.v += (randf() - 0.5f) * 0.2f;
+		hsv.v = clamp(hsv.v, 0.0f, 1.0f);
+		paletteDest[p] = hsv;
+	}
+
+	// Immediately go full brightness
+	bright = 1.0f;
+}
+
 void cocoon_leds_start_new_color() {
 	// Choose a random hue
-	float hueShift = randf() - 0.5f;
-	for (uint8_t i = 0; i < PALETTE_STEPS; i++) {
-		hueChanges[i] = hueShift;
-		satChanges[i] = 1.0f;
-	}
+	HSV hsv = palette[0];
+	hsv.h += randf() - 0.5f;
+	hsv.s = lerp(0.5f, 1.0f, randf());
+	hsv.v = lerp(0.6f, 1.0f, randf());
+
+	cocoon_do_color_tween(hsv, 0);
 }
 
 void cocoon_leds_update(int lastAverageAcc) {
@@ -113,18 +136,21 @@ void cocoon_leds_update(int lastAverageAcc) {
 
 		bright = lerp(bright, brightTarget, 0.023f);
 
-		// Apply hue changes
+		// Apply color tween, if any.
 		for (int8_t p = 0; p < PALETTE_STEPS; p++) {
 			float prog = (float)p / PALETTE_STEPS;
-			float ratio = lerp(0.05, 0.0001, prog);
+			float ratio = lerp(0.02, 0.0001, prog);
 
-			// Reduce hueChanges[], move the amount onto palette[]
-			float changeH = hueChanges[p] * ratio;
-			float changeS = satChanges[p] * ratio;
-			hueChanges[p] -= changeH;
-			palette[p].h += changeH;
-			satChanges[p] -= changeS;
-			palette[p].s = min(1.0, palette[p].s + changeS);
+			if (paletteTweenDelay[p] > 0) {
+				paletteTweenDelay[p] -= elapsed;
+
+			} else if (paletteTween[p] >= ratio) {
+				paletteTween[p] -= ratio;
+
+				palette[p].h = lerp(paletteDest[p].h, palette[p].h, paletteTween[p]);
+				palette[p].s = lerp(paletteDest[p].s, palette[p].s, paletteTween[p]);
+				palette[p].v = lerp(paletteDest[p].v, palette[p].v, paletteTween[p]);
+			}
 		}
 	}
 

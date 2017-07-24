@@ -1,6 +1,6 @@
-- On wind: go faster
-	- Better color changes
+- Transfer colors to neighbors?
 
-- Copy color from neighbor()
+	- On hit: Choose a new color. Hit cocoon, and neighbors, tween to this color.
+	
 
 - Blackout()
