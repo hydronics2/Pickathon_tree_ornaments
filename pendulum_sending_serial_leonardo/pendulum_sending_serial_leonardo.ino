@@ -94,75 +94,75 @@ void setup(void) {
 void loop() {
 
   
-  lastAverageAcc = 3000;
-  
-  if(currentTime - lastTimeSent > 5000){
-    sendTapData();
-    lastTimeSent = currentTime;
-  }
+//  lastAverageAcc = 3000;
+//  
+//  if(currentTime - lastTimeSent > 5000){
+//    sendTapData();
+//    lastTimeSent = currentTime;
+//  }
   
   
   serialEvent();  //look for Serial data coming in...
 
   currentTime = millis();
-//  int averageAcc = 0;
-//
-//  if (Serial.available()) { //for testing... data format is '[' to start and ']' to end. sends to ESP at 115200
-//    byte inByte = Serial.read();
-//    Serial.write(inByte);
-//    //Serial1.write(inByte);
-//    Serial1.write(inByte);
-//  }
-//  
-//
-//  lis.read();      // get X Y and Z data at once
-//  int zg = lis.z;
-//  zg = abs(zg);
-//  int yg = lis.y;
-//  yg = abs(yg);
-//  int acc = 0;
-//  if(yg > zg){  //this is a cheap way to see which axis is the predominent pedulum movement
-//    if(yg > yNeutral){
-//      yg = yg - yNeutral;
-//      acc = yg;
-//    }else{
-//      yg = yNeutral - yg;
-//      acc = yg;
-//    }
-//  }else{
-//    if(zg > zNeutral){
-//      zg = zg - zNeutral;
-//      acc = zg;
-//    }else{
-//      zg = zNeutral - zg;
-//      acc = yg;
-//    }
-//  }
-//  
-//  delay(2); //reading at 400hz
-//  rollingAcc[incrementRolling] = acc;   
-//  incrementRolling++;
-//  if(incrementRolling == sizeRolling){
-//    incrementRolling = 0;
-//    }
-//  findAverage();
-//  if(lastAverageAcc > 4000){ //TAP detected send it to ESP
-//    sendTapData();
-//  int randomColor = random(0,255);
-//  colorWipe(Wheel(randomColor), 0); //
-//  memset(rollingAcc, 0, sizeof(rollingAcc)); //clear array so it doesn't take forever to normalize
-//  delay(400); //
-//  return;
-//  }
-//  if(lastAverageAcc > averageHigh){ //keeps track of high.. shows how much the pendulum is swinging
-//    averageHigh = lastAverageAcc;
-//  }
-//  if(currentTime - lastZeroHighTime > 2000){ //every period 1.95 seconds at 37.5 inches, reset the average high
-//    lastZeroHighTime = currentTime;
-//    averageHighLast = averageHigh;
-//    averageHigh = 0;
-//    //Serial.println(averageHighLast);
-//  }
+  int averageAcc = 0;
+
+  if (Serial.available()) { //for testing... data format is '[' to start and ']' to end. sends to ESP at 115200
+    byte inByte = Serial.read();
+    Serial.write(inByte);
+    //Serial1.write(inByte);
+    Serial1.write(inByte);
+  }
+  
+
+  lis.read();      // get X Y and Z data at once
+  int zg = lis.z;
+  zg = abs(zg);
+  int yg = lis.y;
+  yg = abs(yg);
+  int acc = 0;
+  if(yg > zg){  //this is a cheap way to see which axis is the predominent pedulum movement
+    if(yg > yNeutral){
+      yg = yg - yNeutral;
+      acc = yg;
+    }else{
+      yg = yNeutral - yg;
+      acc = yg;
+    }
+  }else{
+    if(zg > zNeutral){
+      zg = zg - zNeutral;
+      acc = zg;
+    }else{
+      zg = zNeutral - zg;
+      acc = yg;
+    }
+  }
+  
+  delay(2); //reading at 400hz
+  rollingAcc[incrementRolling] = acc;   
+  incrementRolling++;
+  if(incrementRolling == sizeRolling){
+    incrementRolling = 0;
+    }
+  findAverage();
+  if(lastAverageAcc > 4000){ //TAP detected send it to ESP
+    sendTapData();
+  int randomColor = random(0,255);
+  colorWipe(Wheel(randomColor), 0); //
+  memset(rollingAcc, 0, sizeof(rollingAcc)); //clear array so it doesn't take forever to normalize
+  delay(400); //
+  return;
+  }
+  if(lastAverageAcc > averageHigh){ //keeps track of high.. shows how much the pendulum is swinging
+    averageHigh = lastAverageAcc;
+  }
+  if(currentTime - lastZeroHighTime > 2000){ //every period 1.95 seconds at 37.5 inches, reset the average high
+    lastZeroHighTime = currentTime;
+    averageHighLast = averageHigh;
+    averageHigh = 0;
+    //Serial.println(averageHighLast);
+  }
 }
 
 void findAverage(){
@@ -179,11 +179,11 @@ void findAverage(){
 void sendTapData(){
   Serial1.write('['); //start value
   Serial.println('['); //start value
-  int randomNumber = random(1,21);
-  Serial1.write(randomNumber);
-  Serial.println(randomNumber);
-  //char tapValue = map(lastAverageAcc, 2000,6000,0,255);
-  randomNumber = (random(0,255));
+  
+  Serial1.write(COCCOON);
+  Serial.println(COCCOON);
+  
+  byte randomNumber = (random(0,255));
   Serial1.write(randomNumber); //red
   Serial.println(randomNumber); //red
   randomNumber = (random(0,255));
@@ -192,10 +192,11 @@ void sendTapData(){
   randomNumber = (random(0,255));
   Serial1.write(randomNumber); //blue  
   Serial.println(randomNumber); //blue
-  randomNumber = (random(0,255));   
-  Serial1.write(randomNumber); //tap value
-  Serial.println(randomNumber); //tap value
-  randomNumber = (random(0,255));
+  
+  char tapValue = map(lastAverageAcc, 2000,6000,0,255); 
+  Serial1.write(tapValue); //tap value
+  Serial.println(tapValue); //tap value
+  
   Serial1.write(']');  //end value
   Serial.println(']');  //end value
   Serial.println("");
