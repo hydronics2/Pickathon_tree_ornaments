@@ -201,28 +201,26 @@ void sendTapData(){
   Serial.println("");
 }
 
-//--------------------------------------------------------- SERIAL EVENT - UDP Broadcast from Server
-//Example Data: 91,123,228,43,13,25,24,22,21,19,18,16,15,14,12,11,9,8,7,5,4,2,1,0,1,
-// 91 is indicates the beginning of the data
-//Next Three Bytes are RGB - 123,228,43
-//Next Byte is Intensity - 13 (0-254)
-//Next 20 bytes are Distance from Pendulum that was tapped, 
-//where the 1st byte is the distance between pendulum 1 and the pendulum that was tapped 
-//... in this case the tapped pendulum is #19 and it is a distance of 25 from the 1st pendulum
-//Distance is measured in 10ths of feet so, 25 equates to 2.5 feet.
-
-
+//--------------------------------------------------------- SERIAL EVENT
 void serialEvent() {
   while (Serial1.available()) {
-    byte inChar = (byte)Serial1.read();
-    //Serial.println(inChar);
+    Serial.print(Serial1.read());
+    char inChar = 0;
+    Serial.println(inChar);
     if(inChar == '['){
-      Serial.println("data from Server");
+      Serial.println("start logging");
       serialChar = 0;
-    }else if(serialChar < 25){
-      Serial.println(inChar);
+    }
+    if(serialChar < 25){
       serialInput[serialChar] = inChar;
       serialChar++;
+    }else{
+      Serial.println("got all the characters");
+      stringComplete = true;
+      for(int i = 0; i< 25; i++){
+
+        Serial.println(serialInput[i]);
+      }
     }
   }
 }

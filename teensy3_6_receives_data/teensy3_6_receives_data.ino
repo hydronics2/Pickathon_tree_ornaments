@@ -23,13 +23,13 @@ void loop() {
     int foundInt = Serial1.parseInt();
     //Serial.println(foundInt);
     if(foundInt == 91){ //new data
-      //Serial.println("new data");
+      Serial.println("new data");
       logIncrement = 0;
     }
     dataLog[logIncrement] = foundInt;
     logIncrement++;
     if(foundInt == 93){ //got all the data
-      //Serial.println("got all the data");
+      Serial.println("got all the data");
       printData();
     }
   }
