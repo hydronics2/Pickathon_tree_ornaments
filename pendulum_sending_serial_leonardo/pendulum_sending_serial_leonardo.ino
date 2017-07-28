@@ -47,47 +47,47 @@ long lastTimeSent = 0;
 void setup(void) {
   Serial.begin(115200);
   Serial1.begin(115200);
-//  Serial.println("LIS3DH test!");
-//  if (! lis.begin(0x18)) {   // change this to 0x19 for alternative i2c address
-//    Serial.println("Couldnt start");
-//    while (1);
-//  }
-//  Serial.println("LIS3DH found!");
-//  
-//  lis.setRange(LIS3DH_RANGE_2_G);   // 2, 4, 8 or 16 G!
-//
-//  //1, 10, 25, 50, 100, 200, 400_HZ, LOWPOWER_1K6HZ, _5KHZ
-//  lis.setDataRate(LIS3DH_DATARATE_400_HZ);
-//  
-//  Serial.print("Range = "); Serial.print(2 << lis.getRange());  
-//  Serial.println("G");
-//
-//  Serial.print("Data rate = "); Serial.print(lis.getDataRate());  
-//  Serial.println("Hz");
-//
-//  strip.begin();
-//  strip.show(); // Initialize all pixels to 'off'
-//
-//  //capture the near neutral position of the 200G accerometer..at 12bit or 50% of 0-4095=2048
-//    long y2 = 0;
-//    long z2 = 0;
-//  for(int i = 0; i<20; i++){
-//    lis.read();      // get X Y and Z data at once
-//    int y1 = lis.y;  
-//    y1 = abs(y1);
-//    y2 = y1 + y2;
-//    delay(5);
-//    int z1 = lis.z; 
-//    z1 = abs(z1);
-//    z2 = z1 + z2;
-//    delay(5);
-//  }
-//  yNeutral = y2/20;
-//  Serial.print("yNeutral: ");
-//  Serial.println(yNeutral);
-//  Serial.print("zNeutral: ");
-//  zNeutral = z2/20;
-//  Serial.println(zNeutral); 
+  Serial.println("LIS3DH test!");
+  if (! lis.begin(0x18)) {   // change this to 0x19 for alternative i2c address
+    Serial.println("Couldnt start");
+    while (1);
+  }
+  Serial.println("LIS3DH found!");
+  
+  lis.setRange(LIS3DH_RANGE_2_G);   // 2, 4, 8 or 16 G!
+
+  //1, 10, 25, 50, 100, 200, 400_HZ, LOWPOWER_1K6HZ, _5KHZ
+  lis.setDataRate(LIS3DH_DATARATE_400_HZ);
+  
+  Serial.print("Range = "); Serial.print(2 << lis.getRange());  
+  Serial.println("G");
+
+  Serial.print("Data rate = "); Serial.print(lis.getDataRate());  
+  Serial.println("Hz");
+
+  strip.begin();
+  strip.show(); // Initialize all pixels to 'off'
+
+  //capture the near neutral position of the 200G accerometer..at 12bit or 50% of 0-4095=2048
+    long y2 = 0;
+    long z2 = 0;
+  for(int i = 0; i<20; i++){
+    lis.read();      // get X Y and Z data at once
+    int y1 = lis.y;  
+    y1 = abs(y1);
+    y2 = y1 + y2;
+    delay(5);
+    int z1 = lis.z; 
+    z1 = abs(z1);
+    z2 = z1 + z2;
+    delay(5);
+  }
+  yNeutral = y2/20;
+  Serial.print("yNeutral: ");
+  Serial.println(yNeutral);
+  Serial.print("zNeutral: ");
+  zNeutral = z2/20;
+  Serial.println(zNeutral); 
 }
 
 
