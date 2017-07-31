@@ -14,10 +14,10 @@
 #include <Adafruit_NeoPixel.h>
 #include "Color.h"
 
+#define DEFAULT_GLOBAL_BRIGHTNESS   (0x10)
 #define LED_STRIPS_PIN        (6)
 #define LEDS_PER_STRIP        (18)
 #define PIXEL_COUNT           (LEDS_PER_STRIP * 4)
-#define MAX_BRIGHT            (0x7f)
 #define DO_SPIRAL_LIGHTS      (false)
 
 #define PALETTE_STEPS         (10)
@@ -45,7 +45,7 @@ HSV palette[PALETTE_STEPS];
 
 float paletteTween[PALETTE_STEPS];
 HSV paletteDest[PALETTE_STEPS];
-float paletteTweenDelay[PALETTE_STEPS];
+long paletteTweenDelay[PALETTE_STEPS];
 
 const float CENTER_STAGGER = 0.05f * (0.22f / BAND_SPREAD);
 float center_phases[4] = {CENTER_STAGGER * 0, CENTER_STAGGER * 1, CENTER_STAGGER * 2, CENTER_STAGGER * 3};
@@ -73,6 +73,8 @@ int32_t brightMicrosRemaining = 0;	// update brightness when this flips below ze
 int32_t blackoutDelay = 0;
 int32_t blackoutMicrosRemaining = 0;
 
+uint8_t globalBrightness = DEFAULT_GLOBAL_BRIGHTNESS;
+
 void cocoon_leds_init(){
 	for (int8_t i = 0; i < PALETTE_STEPS; i++) {
 		paletteTween[i] = 0;
@@ -84,14 +86,21 @@ void cocoon_leds_init(){
 	strip.show(); // Initialize all pixels to 'off'
 }
 
-void cocoon_do_color_tween(uint32_t hsv32, int delayMicros) {
+// Valid range: 0..63
+void cocoon_set_brightness(uint8_t b) {
+	if (b > 63) b = 63;
+	globalBrightness = b;
+}
+
+void cocoon_do_color_tween(HSV hsv, long delayMicros) {
 	if (blackoutMicrosRemaining > 0) return;	// Blackout? Do nothing.
 
-	HSV hsv = (HSV){
-		((hsv32 & 0xff0000) >> 16) / 255.0f,
-		((hsv32 & 0x00ff00) >>  8) / 255.0f,
-		((hsv32 & 0x0000ff)      ) / 255.0f
-	};
+	Serial.print("Tween to: ");
+	Serial.print(hsv.h);
+	Serial.print(" ");
+	Serial.print(hsv.s);
+	Serial.print(" ");
+	Serial.println(hsv.v);
 
 	int delayMult = lerp(300, 500, randf()) * 1000;
 
@@ -100,10 +109,10 @@ void cocoon_do_color_tween(uint32_t hsv32, int delayMicros) {
 		paletteTweenDelay[p] = p * delayMult + delayMicros;
 
 		// Inject a little randomness to the palette
-		hsv.h += (randf() - 0.5f) * 0.2f;
-		hsv.s += (randf() - 0.5f) * 0.2f;
+		hsv.h += (randf() - 0.5f) * 0.01f;
+		hsv.s += (randf()) * 0.05f;
 		hsv.s = clamp(hsv.s, 0.0f, 1.0f);
-		hsv.v += (randf() - 0.5f) * 0.3f;
+		hsv.v += (randf() - 0.5f) * 0.2f;
 		hsv.v = clamp(hsv.v, 0.5f, 1.0f);
 		paletteDest[p] = hsv;
 	}
@@ -112,22 +121,39 @@ void cocoon_do_color_tween(uint32_t hsv32, int delayMicros) {
 	bandsUntilChangeValue = 1;
 }
 
+void cocoon_do_color_tween_bytes(uint8_t r, uint8_t g, uint8_t b, long delayMicros)
+{
+	HSV hsv = (HSV){
+		r / 255.0f,
+		g / 255.0f,
+		b / 255.0f
+	};
+
+	cocoon_do_color_tween(hsv, delayMicros);
+}
+
 void cocoon_leds_start_new_color() {
 	if (blackoutMicrosRemaining > 0) return;	// Blackout? Do nothing.
 
 	// Choose a random hue
-	HSV hsv = palette[0];
-	hsv.h += randf() - 0.5f;
-	hsv.s = lerp(0.5f, 1.0f, randf());
-	hsv.v = lerp(0.6f, 1.0f, randf());
+	HSV * hsv = &palette[0];
+	hsv->h += randf();
+	hsv->h -= floor(hsv->h);
+	hsv->s = lerp(0.7f, 1.0f, randf());
+	hsv->v = lerp(0.6f, 1.0f, randf());
+
+	cocoon_do_color_tween(palette[0], 0);
 }
 
 uint32_t cocoon_get_current_color() {
 	if (blackoutMicrosRemaining > 0) return 0x0;
 
 	HSV hsv = palette[0];
+
+	float hue = hsv.h - floor(hsv.h);
+
 	return (
-		(((uint32_t)(hsv.h * 0xff)) << 16) |
+		(((uint32_t)(hue   * 0xff)) << 16) |
 		(((uint32_t)(hsv.s * 0xff)) <<  8) |
 		(((uint32_t)(hsv.v * 0xff)))
 	);
@@ -164,6 +190,12 @@ void cocoon_leds_update(int lastAverageAcc) {
 
 		float brightTarget = max(brightWind, brightIdle * IDLE_BRIGHTNESS_F);
 
+		// When tweening: Get bright!
+		bool isTweening = (paletteTweenDelay[0] <= 0) && (paletteTween[0] > 0.01f);
+		if (isTweening) {
+			brightTarget = 1.0f;
+		}
+
 		// Blackout
 		if (blackoutDelay > 0) {
 			blackoutDelay -= elapsed;
@@ -173,14 +205,15 @@ void cocoon_leds_update(int lastAverageAcc) {
 			blackoutMicrosRemaining -= elapsed;
 		}
 
-		float brightSpeed = 0.023f * ((blackoutMicrosRemaining > 0) ? 10 : 1);
+		// Lerp the brightness
+		float brightSpeed = 0.023f * (((blackoutMicrosRemaining > 0) || isTweening) ? 10 : 1);
 		bright = lerp(bright, brightTarget, brightSpeed);
 		lowBright = 0.0f;//max(0.0f, bright - 0.75f);
 
 		// Apply color tween(s), if any.
 		for (int8_t p = 0; p < PALETTE_STEPS; p++) {
 			float prog = (float)p / PALETTE_STEPS;
-			float ratio = lerp(0.02, 0.0001, prog);
+			float ratio = lerp(0.05, 0.0001, prog);
 
 			if (paletteTweenDelay[p] > 0) {
 				paletteTweenDelay[p] -= elapsed;
@@ -196,6 +229,10 @@ void cocoon_leds_update(int lastAverageAcc) {
 	}
 
 	for (uint8_t side = 0; side < 4; side++) {
+		int16_t brightness = globalBrightness - (side * 16);
+		brightness = clamp(brightness, 0, 16);
+		brightness *= 8;	// 16 -> 128
+
 		// Palette emits out from center.
 		float target = emit_phases[side] -= EMIT_SPEED * timeMult * lerp(1.0f, 3.0f, windAmt);
 
@@ -244,7 +281,7 @@ void cocoon_leds_update(int lastAverageAcc) {
 			if (DO_SPIRAL_LIGHTS) {
 				if (((side + i) % 4) != 0) continue;	// light every 4th LED
 			} else {
-				if (side != 0) break;	// only light one strip
+				//if (side != 0) break;	// only light one strip
 			}
 
 			float distanceFromCenter = (float)center_loc - (float)i;
@@ -266,7 +303,7 @@ void cocoon_leds_update(int lastAverageAcc) {
 				hsv2rgb(
 					hsv.h,
 					hsv.s,
-					hsv.v * (MAX_BRIGHT / (float)0xff)
+					hsv.v * (brightness / (float)0xff)
 				)
 			);
 

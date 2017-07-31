@@ -18,6 +18,10 @@
 #define BLACKOUT_THRESHOLD   (2000)
 #define DEV_BLINK            (false)
 
+#define SEND_THROTTLE_MILLIS (500)
+
+#define TAP_DELAY_MICROS     (200 * 1000)
+
 // I2C
 Adafruit_LIS3DH lis = Adafruit_LIS3DH();
 
@@ -40,9 +44,15 @@ uint8_t blink = 0;
 const uint8_t BUILTIN_LED_PIN = 17;
 
 int serialChar = 0;
-int serialInput[26];
+uint8_t serialInput[31];
 boolean stringComplete = false;
-long lastTimeSent = 0;
+
+// Users may tilt a cocoon, which would normally blast packets at the router.
+// Solution: Throttle the packet rate, and latch the hit-state, so after a
+// cocoon is hit, it must return to a resting position before it can send
+// another packet.
+unsigned long lastSentMillis = 0;
+bool isLatchOn = false;
 
 void setup(void) {
   pinMode(BUILTIN_LED_PIN, OUTPUT);
@@ -147,9 +157,12 @@ void loop() {
 
   findAverage();
 
+  bool isThrottled = (currentTime - lastSentMillis) <= SEND_THROTTLE_MILLIS;
+
   if(lastAverageAcc > TAP_THRESHOLD){ //TAP detected send it to ESP
 
     // Hard hit? Do a blackout
+		/*
     if (lastAverageAcc > BLACKOUT_THRESHOLD) {
       cocoon_do_blackout(0);
 
@@ -157,16 +170,27 @@ void loop() {
 
       return;
     }
+		*/
 
-    cocoon_leds_start_new_color();
-    uint32_t color = cocoon_get_current_color();
-    cocoon_do_color_tween(color, 0);
+    if (!isThrottled && !isLatchOn) {
+      cocoon_leds_start_new_color();
+      uint32_t color = cocoon_get_current_color();
+      sendTapData(color);
+    }
 
-    sendTapData(color);
-    
+		lastSentMillis = currentTime;
+
     memset(rollingAcc, 0, sizeof(rollingAcc)); //clear array so it doesn't take forever to normalize
 
+    isLatchOn = true;
+
     return;
+
+  } else {
+    // Back to a resting position. If we're not throttled: Disable the latch.
+    if (!isThrottled) {
+      isLatchOn = false;
+    }
   }
 
   if(lastAverageAcc > averageHigh){ //keeps track of high.. shows how much the pendulum is swinging
@@ -191,32 +215,45 @@ void findAverage(){
   //Serial.println(lastAverageAcc);
 }
 
+uint8_t cleanByte(uint8_t b)
+{
+  // '[' is our packet header, we'll fudge this a bit: Don't send that value.
+  if (b == '[') b++;
+  if (b == ']') b++;
+  return b;
+}
+
 // sends data to ESP at 115200
 // sending Coccoon#, Red,Green,Blue, Intensity
 void sendTapData(uint32_t currentColor){
   Serial1.write('['); //start value
-  Serial.println('['); //start value
-  
+  Serial.println("\n["); //start value
+
   Serial1.write(COCOON);
   Serial.println(COCOON);
 
-  int red = ((currentColor & 0xff0000) >> 16) / 255.0f;
-  int green = ((currentColor & 0x00ff00) >>  8) / 255.0f;
-  int blue = ((currentColor & 0x0000ff)      ) / 255.0f;
-  
+  uint8_t red = ((currentColor & 0xff0000) >> 16);
+  uint8_t green = ((currentColor & 0x00ff00) >>  8);
+  uint8_t blue = ((currentColor & 0x0000ff)      );
+
+  red = cleanByte(red);
+  green = cleanByte(green);
+  blue = cleanByte(blue);
+
   Serial1.write(red); //red
   Serial.println(red); //red
 
   Serial1.write(green); //green
   Serial.println(green); //green
 
-  Serial1.write(blue); //blue  
+  Serial1.write(blue); //blue
   Serial.println(blue); //blue
-  
-  char tapValue = map(lastAverageAcc, 2000,6000,0,255); 
+
+  uint8_t tapValue = map(lastAverageAcc, 2000,6000,0,255);
+  tapValue = cleanByte(tapValue);
   Serial1.write(tapValue); //tap value
   Serial.println(tapValue); //tap value
-  
+
   Serial1.write(']');  //end value
   Serial.println(']');  //end value
   Serial.println("");
@@ -224,11 +261,12 @@ void sendTapData(uint32_t currentColor){
 
 //--------------------------------------------------------- SERIAL EVENT - UDP Broadcast from Server
 //Example Data: 91,123,228,43,13,25,24,22,21,19,18,16,15,14,12,11,9,8,7,5,4,2,1,0,1,
-// 91 is indicates the beginning of the data
+// 91 is indicates the beginning of the data, '['
 //Next Three Bytes are RGB - 123,228,43
 //Next Byte is Intensity - 13 (0-254)
-//Next 20 bytes are Distance from Pendulum that was tapped, 
-//where the 1st byte is the distance between pendulum 1 and the pendulum that was tapped 
+//Next Byte is global brightness (0-63)
+//Next 20 bytes are Distance from Pendulum that was tapped,
+//where the 1st byte is the distance between pendulum 1 and the pendulum that was tapped
 //... in this case the tapped pendulum is #19 and it is a distance of 25 from the 1st pendulum
 //Distance is measured in 10ths of feet so, 25 equates to 2.5 feet.
 
@@ -240,9 +278,38 @@ void serialEvent() {
     if(inChar == '['){
       Serial.println("data from Server");
       serialChar = 0;
-    }else if(serialChar < 25){
+
+    }else if(serialChar < 30){
       Serial.println(inChar);
       serialInput[serialChar] = inChar;
+
+      if (serialChar == 4) {
+        Serial.print(">>> Brightness: ");
+        Serial.println(inChar * 1);
+
+        cocoon_set_brightness(inChar);
+
+      // If this byte corresponds to this COCOON number: Process the hit,
+      // and do a color flash.
+      } else if (serialChar == (COCOON + 5)) {
+
+        Serial.print("*** Flash! distance:");
+        Serial.print(inChar * 1);
+				Serial.print("  0:");
+				Serial.print(serialInput[0]);
+				Serial.print("  1:");
+				Serial.print(serialInput[1]);
+				Serial.print("  2:");
+				Serial.println(serialInput[2]);
+
+        // Exception: If the delay is 0, then this cocoon triggered the tap, and
+        // we already did the color change.
+        if (inChar != 0) {
+          long delay = inChar * TAP_DELAY_MICROS;
+          cocoon_do_color_tween_bytes(serialInput[0], serialInput[1], serialInput[2], delay);
+        }
+      }
+
       serialChar++;
     }
   }
