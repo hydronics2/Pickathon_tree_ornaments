@@ -212,6 +212,14 @@ void findAverage(){
   //Serial.println(lastAverageAcc);
 }
 
+uint8_t cleanByte(uint8_t b)
+{
+	// '[' is our packet header, we'll fudge this a bit: Don't send that value.
+	if (b == '[') b++;
+	if (b == ']') b++;
+	return b;
+}
+
 // sends data to ESP at 115200
 // sending Coccoon#, Red,Green,Blue, Intensity
 void sendTapData(uint32_t currentColor){
@@ -225,6 +233,10 @@ void sendTapData(uint32_t currentColor){
   uint8_t green = ((currentColor & 0x00ff00) >>  8);
   uint8_t blue = ((currentColor & 0x0000ff)      );
 
+	red = cleanByte(red);
+	green = cleanByte(green);
+	blue = cleanByte(blue);
+
   Serial1.write(red); //red
   Serial.println(red); //red
 
@@ -235,6 +247,7 @@ void sendTapData(uint32_t currentColor){
   Serial.println(blue); //blue
 
   char tapValue = map(lastAverageAcc, 2000,6000,0,255);
+	tapValue = cleanByte(tapValue);
   Serial1.write(tapValue); //tap value
   Serial.println(tapValue); //tap value
 
