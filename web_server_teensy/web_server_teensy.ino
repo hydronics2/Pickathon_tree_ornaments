@@ -3,7 +3,7 @@ teensy3.2 connects to router... reads GET requests coming from ESP pendulums
 teensy web server IP 192.168.16.200
 
 data format is '[' start character, COCOON#, other data, other data, (up to 20 bytes), ']' end character
- 
+
  */
 
 #include <SPI.h>
@@ -34,6 +34,8 @@ byte placeX[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20};  // x posi
 byte placeY[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20}; // y position in feet^-1
 byte distanceArray[20];
 
+int globalBrightness = 16; //(0-63) do not sent
+
 void setup() {
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
@@ -46,7 +48,7 @@ void setup() {
   Serial.print("server is at ");
   Serial.println(Ethernet.localIP());
   Udp.begin(localPort);
-  
+
 }
 
 byte startLogging = 0;
@@ -68,7 +70,7 @@ boolean findInteger = 0;
 void loop() {
 
   int packetSize = Udp.parsePacket();
-  if (packetSize) {    
+  if (packetSize) {
     Serial.print("Received packet of size ");
     Serial.println(packetSize);
     Serial.print("From ");
@@ -96,12 +98,12 @@ void loop() {
     byte activeGreen = 0;
     byte activeBlue = 0;
     byte activeIntensity = 0;
-    
+
     if(packetSize > 2){ //includes cocoon number
       activePendulum = (int)packetBuffer[1];
       Serial.print("active pendulum: ");
       Serial.println(activePendulum);
-      
+
     }
     if(packetSize == 6){ //got red green blue too
       activeRed = (int)packetBuffer[2];
@@ -109,18 +111,20 @@ void loop() {
       activeBlue = (int)packetBuffer[4];
       activeIntensity = (int)packetBuffer[5];
     }
-
+    Serial.print("sending globalBrightness: ");
+    Serial.println(globalBrightness);
     findDistances(activePendulum);
-    
+
     Serial.println("");
     Serial.println("");
     // send a reply to the IP address and port that sent us the packet we received
     Udp.beginPacket("255.255.255.255", 8888);
-    Udp.write(91);  //signifies start of package... probalby goingn to leave out 
+    Udp.write(91);  //signifies start of package... probalby goingn to leave out
     Udp.write(activeRed);
     Udp.write(activeGreen);
     Udp.write(activeBlue);
     Udp.write(activeIntensity);
+    Udp.write(globalBrightness);
     for(int i=0; i<20; i++){
       Udp.write(distanceArray[i]);
     }
@@ -151,7 +155,7 @@ void loop() {
 //    } else if(inByte == ']'){
 //      if(logIncrement < sizeDataLog){
 //        dataLog[logIncrement] = ']';
-//      }      
+//      }
 //      startLogging = 0;
 //      Serial.println("got the data....");
 //      passData = true;
@@ -200,7 +204,7 @@ void loop() {
           dataLog[logIncrement] = c;
           logIncrement++;
         }
- 
+
         if(findInteger == true){
           findInteger = false;
           if(stopIncrement - startIncrement == 1){
@@ -210,11 +214,11 @@ void loop() {
             //dataLog2[incrementData2] = tempInt;
             String tempString = String(dataLog[startIncrement]);
             int tempInt = tempString.toInt();
-            dataLog2[incrementData2] = (byte)tempInt;         
+            dataLog2[incrementData2] = (byte)tempInt;
             findInteger = false;
             incrementData2++;
           } else if(stopIncrement - startIncrement == 2){
-            //startIncrement = 
+            //startIncrement =
             char buffer[3];
             buffer[0] = dataLog[startIncrement];
             buffer[1] = dataLog[startIncrement+1];
@@ -228,7 +232,7 @@ void loop() {
             incrementData2++;
             findInteger = false;
           } else if(stopIncrement - startIncrement == 3){
-            //startIncrement = 
+            //startIncrement =
             char buffer[3];
             buffer[0] = dataLog[startIncrement];
             buffer[1] = dataLog[startIncrement+1];
@@ -275,7 +279,3 @@ void findDistances(byte activePendulum){
     distanceArray[i] = distance;
   }
 }
-
-
- 
-
