@@ -18,6 +18,8 @@
 #define BLACKOUT_THRESHOLD   (2000)
 #define DEV_BLINK            (false)
 
+#define SEND_THROTTLE_MILLIS (500)
+
 // I2C
 Adafruit_LIS3DH lis = Adafruit_LIS3DH();
 
@@ -42,7 +44,13 @@ const uint8_t BUILTIN_LED_PIN = 17;
 int serialChar = 0;
 int serialInput[26];
 boolean stringComplete = false;
-long lastTimeSent = 0;
+
+// Users may tilt a cocoon, which would normally blast packets at the router.
+// Solution: Throttle the packet rate, and latch the hit-state, so after a
+// cocoon is hit, it must return to a resting position before it can send
+// another packet.
+unsigned long lastSentMillis = 0;
+bool isLatchOn = false;
 
 void setup(void) {
   pinMode(BUILTIN_LED_PIN, OUTPUT);
@@ -147,6 +155,8 @@ void loop() {
 
   findAverage();
 
+  bool isThrottled = (currentTime - lastSentMillis) <= SEND_THROTTLE_MILLIS;
+
   if(lastAverageAcc > TAP_THRESHOLD){ //TAP detected send it to ESP
 
     // Hard hit? Do a blackout
@@ -162,12 +172,23 @@ void loop() {
     uint32_t color = cocoon_get_current_color();
     cocoon_do_color_tween(color, 0);
 
-    sendTapData(color);
-    
+    if (!isThrottled && !isLatchOn) {
+      sendTapData(color);
+      lastSentMillis = currentTime;
+    }
+
     memset(rollingAcc, 0, sizeof(rollingAcc)); //clear array so it doesn't take forever to normalize
 
+    isLatchOn = true;
+
     return;
-  }
+
+  } else {
+		// Back to a resting position. If we're not throttled: Disable the latch.
+		if (!isThrottled) {
+			isLatchOn = false;
+		}
+	}
 
   if(lastAverageAcc > averageHigh){ //keeps track of high.. shows how much the pendulum is swinging
     averageHigh = lastAverageAcc;
@@ -196,27 +217,27 @@ void findAverage(){
 void sendTapData(uint32_t currentColor){
   Serial1.write('['); //start value
   Serial.println('['); //start value
-  
+
   Serial1.write(COCOON);
   Serial.println(COCOON);
 
-  int red = ((currentColor & 0xff0000) >> 16) / 255.0f;
-  int green = ((currentColor & 0x00ff00) >>  8) / 255.0f;
-  int blue = ((currentColor & 0x0000ff)      ) / 255.0f;
-  
+  uint8_t red = ((currentColor & 0xff0000) >> 16);
+  uint8_t green = ((currentColor & 0x00ff00) >>  8);
+  uint8_t blue = ((currentColor & 0x0000ff)      );
+
   Serial1.write(red); //red
   Serial.println(red); //red
 
   Serial1.write(green); //green
   Serial.println(green); //green
 
-  Serial1.write(blue); //blue  
+  Serial1.write(blue); //blue
   Serial.println(blue); //blue
-  
-  char tapValue = map(lastAverageAcc, 2000,6000,0,255); 
+
+  char tapValue = map(lastAverageAcc, 2000,6000,0,255);
   Serial1.write(tapValue); //tap value
   Serial.println(tapValue); //tap value
-  
+
   Serial1.write(']');  //end value
   Serial.println(']');  //end value
   Serial.println("");
@@ -227,8 +248,8 @@ void sendTapData(uint32_t currentColor){
 // 91 is indicates the beginning of the data
 //Next Three Bytes are RGB - 123,228,43
 //Next Byte is Intensity - 13 (0-254)
-//Next 20 bytes are Distance from Pendulum that was tapped, 
-//where the 1st byte is the distance between pendulum 1 and the pendulum that was tapped 
+//Next 20 bytes are Distance from Pendulum that was tapped,
+//where the 1st byte is the distance between pendulum 1 and the pendulum that was tapped
 //... in this case the tapped pendulum is #19 and it is a distance of 25 from the 1st pendulum
 //Distance is measured in 10ths of feet so, 25 equates to 2.5 feet.
 

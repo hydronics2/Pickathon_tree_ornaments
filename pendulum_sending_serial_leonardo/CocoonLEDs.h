@@ -126,8 +126,11 @@ uint32_t cocoon_get_current_color() {
 	if (blackoutMicrosRemaining > 0) return 0x0;
 
 	HSV hsv = palette[0];
+
+	float hue = hsv.h - floor(hsv.h);
+
 	return (
-		(((uint32_t)(hsv.h * 0xff)) << 16) |
+		(((uint32_t)(hue   * 0xff)) << 16) |
 		(((uint32_t)(hsv.s * 0xff)) <<  8) |
 		(((uint32_t)(hsv.v * 0xff)))
 	);
