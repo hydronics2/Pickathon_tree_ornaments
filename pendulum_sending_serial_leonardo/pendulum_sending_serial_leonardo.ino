@@ -20,7 +20,7 @@
 
 #define SEND_THROTTLE_MILLIS (500)
 
-#define TAP_DELAY_MICROS     (100 * 1000)
+#define TAP_DELAY_MICROS     (200 * 1000)
 
 // I2C
 Adafruit_LIS3DH lis = Adafruit_LIS3DH();
@@ -44,7 +44,7 @@ uint8_t blink = 0;
 const uint8_t BUILTIN_LED_PIN = 17;
 
 int serialChar = 0;
-int serialInput[31];
+uint8_t serialInput[31];
 boolean stringComplete = false;
 
 // Users may tilt a cocoon, which would normally blast packets at the router.
@@ -162,6 +162,7 @@ void loop() {
   if(lastAverageAcc > TAP_THRESHOLD){ //TAP detected send it to ESP
 
     // Hard hit? Do a blackout
+		/*
     if (lastAverageAcc > BLACKOUT_THRESHOLD) {
       cocoon_do_blackout(0);
 
@@ -169,15 +170,15 @@ void loop() {
 
       return;
     }
-
-    cocoon_leds_start_new_color();
-    uint32_t color = cocoon_get_current_color();
-    cocoon_do_color_tween(color, 0);
+		*/
 
     if (!isThrottled && !isLatchOn) {
+      cocoon_leds_start_new_color();
+      uint32_t color = cocoon_get_current_color();
       sendTapData(color);
-      lastSentMillis = currentTime;
     }
+
+		lastSentMillis = currentTime;
 
     memset(rollingAcc, 0, sizeof(rollingAcc)); //clear array so it doesn't take forever to normalize
 
@@ -186,11 +187,11 @@ void loop() {
     return;
 
   } else {
-		// Back to a resting position. If we're not throttled: Disable the latch.
-		if (!isThrottled) {
-			isLatchOn = false;
-		}
-	}
+    // Back to a resting position. If we're not throttled: Disable the latch.
+    if (!isThrottled) {
+      isLatchOn = false;
+    }
+  }
 
   if(lastAverageAcc > averageHigh){ //keeps track of high.. shows how much the pendulum is swinging
     averageHigh = lastAverageAcc;
@@ -216,17 +217,17 @@ void findAverage(){
 
 uint8_t cleanByte(uint8_t b)
 {
-	// '[' is our packet header, we'll fudge this a bit: Don't send that value.
-	if (b == '[') b++;
-	if (b == ']') b++;
-	return b;
+  // '[' is our packet header, we'll fudge this a bit: Don't send that value.
+  if (b == '[') b++;
+  if (b == ']') b++;
+  return b;
 }
 
 // sends data to ESP at 115200
 // sending Coccoon#, Red,Green,Blue, Intensity
 void sendTapData(uint32_t currentColor){
   Serial1.write('['); //start value
-  Serial.println('['); //start value
+  Serial.println("\n["); //start value
 
   Serial1.write(COCOON);
   Serial.println(COCOON);
@@ -235,9 +236,9 @@ void sendTapData(uint32_t currentColor){
   uint8_t green = ((currentColor & 0x00ff00) >>  8);
   uint8_t blue = ((currentColor & 0x0000ff)      );
 
-	red = cleanByte(red);
-	green = cleanByte(green);
-	blue = cleanByte(blue);
+  red = cleanByte(red);
+  green = cleanByte(green);
+  blue = cleanByte(blue);
 
   Serial1.write(red); //red
   Serial.println(red); //red
@@ -248,8 +249,8 @@ void sendTapData(uint32_t currentColor){
   Serial1.write(blue); //blue
   Serial.println(blue); //blue
 
-  char tapValue = map(lastAverageAcc, 2000,6000,0,255);
-	tapValue = cleanByte(tapValue);
+  uint8_t tapValue = map(lastAverageAcc, 2000,6000,0,255);
+  tapValue = cleanByte(tapValue);
   Serial1.write(tapValue); //tap value
   Serial.println(tapValue); //tap value
 
@@ -282,27 +283,32 @@ void serialEvent() {
       Serial.println(inChar);
       serialInput[serialChar] = inChar;
 
-			if (serialChar == 4) {
-				Serial.print(">>> Brightness: ");
-				Serial.println(inChar * 1);
+      if (serialChar == 4) {
+        Serial.print(">>> Brightness: ");
+        Serial.println(inChar * 1);
 
-				cocoon_set_brightness(inChar);
+        cocoon_set_brightness(inChar);
 
-			// If this byte corresponds to this COCOON number: Process the hit,
-			// and do a color flash.
-			} else if (serialChar == (COCOON + 5)) {
+      // If this byte corresponds to this COCOON number: Process the hit,
+      // and do a color flash.
+      } else if (serialChar == (COCOON + 5)) {
 
-				Serial.print("*** Flash! ");
-				Serial.println(inChar * 1);
+        Serial.print("*** Flash! distance:");
+        Serial.print(inChar * 1);
+				Serial.print("  0:");
+				Serial.print(serialInput[0]);
+				Serial.print("  1:");
+				Serial.print(serialInput[1]);
+				Serial.print("  2:");
+				Serial.println(serialInput[2]);
 
-				// Exception: If the delay is 0, then this cocoon triggered the tap, and
-				// we already did the color change.
-				if (inChar != 0) {
-					uint32_t color = (serialInput[0] << 16) | (serialInput[1] << 8) | serialInput[2];
-					long delay = inChar * TAP_DELAY_MICROS;
-					cocoon_do_color_tween(color, delay);
-				}
-			}
+        // Exception: If the delay is 0, then this cocoon triggered the tap, and
+        // we already did the color change.
+        if (inChar != 0) {
+          long delay = inChar * TAP_DELAY_MICROS;
+          cocoon_do_color_tween_bytes(serialInput[0], serialInput[1], serialInput[2], delay);
+        }
+      }
 
       serialChar++;
     }
