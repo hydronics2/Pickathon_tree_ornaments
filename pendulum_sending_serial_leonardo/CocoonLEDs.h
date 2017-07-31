@@ -14,10 +14,10 @@
 #include <Adafruit_NeoPixel.h>
 #include "Color.h"
 
+#define DEFAULT_GLOBAL_BRIGHTNESS   (0x10)
 #define LED_STRIPS_PIN        (6)
 #define LEDS_PER_STRIP        (18)
 #define PIXEL_COUNT           (LEDS_PER_STRIP * 4)
-#define MAX_BRIGHT            (0x7f)
 #define DO_SPIRAL_LIGHTS      (false)
 
 #define PALETTE_STEPS         (10)
@@ -45,7 +45,7 @@ HSV palette[PALETTE_STEPS];
 
 float paletteTween[PALETTE_STEPS];
 HSV paletteDest[PALETTE_STEPS];
-float paletteTweenDelay[PALETTE_STEPS];
+long paletteTweenDelay[PALETTE_STEPS];
 
 const float CENTER_STAGGER = 0.05f * (0.22f / BAND_SPREAD);
 float center_phases[4] = {CENTER_STAGGER * 0, CENTER_STAGGER * 1, CENTER_STAGGER * 2, CENTER_STAGGER * 3};
@@ -73,6 +73,8 @@ int32_t brightMicrosRemaining = 0;	// update brightness when this flips below ze
 int32_t blackoutDelay = 0;
 int32_t blackoutMicrosRemaining = 0;
 
+uint8_t globalBrightness = DEFAULT_GLOBAL_BRIGHTNESS;
+
 void cocoon_leds_init(){
 	for (int8_t i = 0; i < PALETTE_STEPS; i++) {
 		paletteTween[i] = 0;
@@ -84,7 +86,13 @@ void cocoon_leds_init(){
 	strip.show(); // Initialize all pixels to 'off'
 }
 
-void cocoon_do_color_tween(uint32_t hsv32, int delayMicros) {
+// Valid range: 0..63
+void cocoon_set_brightness(uint8_t b) {
+	if (b > 63) b = 63;
+	globalBrightness = b;
+}
+
+void cocoon_do_color_tween(uint32_t hsv32, long delayMicros) {
 	if (blackoutMicrosRemaining > 0) return;	// Blackout? Do nothing.
 
 	HSV hsv = (HSV){
@@ -199,6 +207,10 @@ void cocoon_leds_update(int lastAverageAcc) {
 	}
 
 	for (uint8_t side = 0; side < 4; side++) {
+		int16_t brightness = globalBrightness - (side * 16);
+		brightness = clamp(brightness, 0, 16);
+		brightness *= 8;	// 16 -> 128
+
 		// Palette emits out from center.
 		float target = emit_phases[side] -= EMIT_SPEED * timeMult * lerp(1.0f, 3.0f, windAmt);
 
@@ -247,7 +259,7 @@ void cocoon_leds_update(int lastAverageAcc) {
 			if (DO_SPIRAL_LIGHTS) {
 				if (((side + i) % 4) != 0) continue;	// light every 4th LED
 			} else {
-				if (side != 0) break;	// only light one strip
+				//if (side != 0) break;	// only light one strip
 			}
 
 			float distanceFromCenter = (float)center_loc - (float)i;
@@ -269,7 +281,7 @@ void cocoon_leds_update(int lastAverageAcc) {
 				hsv2rgb(
 					hsv.h,
 					hsv.s,
-					hsv.v * (MAX_BRIGHT / (float)0xff)
+					hsv.v * (brightness / (float)0xff)
 				)
 			);
 

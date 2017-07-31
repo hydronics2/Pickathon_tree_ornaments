@@ -20,6 +20,8 @@
 
 #define SEND_THROTTLE_MILLIS (500)
 
+#define TAP_DELAY_MICROS     (100 * 1000)
+
 // I2C
 Adafruit_LIS3DH lis = Adafruit_LIS3DH();
 
@@ -42,7 +44,7 @@ uint8_t blink = 0;
 const uint8_t BUILTIN_LED_PIN = 17;
 
 int serialChar = 0;
-int serialInput[26];
+int serialInput[31];
 boolean stringComplete = false;
 
 // Users may tilt a cocoon, which would normally blast packets at the router.
@@ -258,9 +260,10 @@ void sendTapData(uint32_t currentColor){
 
 //--------------------------------------------------------- SERIAL EVENT - UDP Broadcast from Server
 //Example Data: 91,123,228,43,13,25,24,22,21,19,18,16,15,14,12,11,9,8,7,5,4,2,1,0,1,
-// 91 is indicates the beginning of the data
+// 91 is indicates the beginning of the data, '['
 //Next Three Bytes are RGB - 123,228,43
 //Next Byte is Intensity - 13 (0-254)
+//Next Byte is global brightness (0-63)
 //Next 20 bytes are Distance from Pendulum that was tapped,
 //where the 1st byte is the distance between pendulum 1 and the pendulum that was tapped
 //... in this case the tapped pendulum is #19 and it is a distance of 25 from the 1st pendulum
@@ -274,9 +277,33 @@ void serialEvent() {
     if(inChar == '['){
       Serial.println("data from Server");
       serialChar = 0;
-    }else if(serialChar < 25){
+
+    }else if(serialChar < 30){
       Serial.println(inChar);
       serialInput[serialChar] = inChar;
+
+			if (serialChar == 4) {
+				Serial.print(">>> Brightness: ");
+				Serial.println(inChar * 1);
+
+				cocoon_set_brightness(inChar);
+
+			// If this byte corresponds to this COCOON number: Process the hit,
+			// and do a color flash.
+			} else if (serialChar == (COCOON + 5)) {
+
+				Serial.print("*** Flash! ");
+				Serial.println(inChar * 1);
+
+				// Exception: If the delay is 0, then this cocoon triggered the tap, and
+				// we already did the color change.
+				if (inChar != 0) {
+					uint32_t color = (serialInput[0] << 16) | (serialInput[1] << 8) | serialInput[2];
+					long delay = inChar * TAP_DELAY_MICROS;
+					cocoon_do_color_tween(color, delay);
+				}
+			}
+
       serialChar++;
     }
   }
